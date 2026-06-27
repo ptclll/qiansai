@@ -180,7 +180,9 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.5);
             font-family: 'Consolas', 'Monaco', sans-serif;
             pointer-events: auto;
+            cursor: grab;
         }
+        .waypoint-marker:active { cursor: grabbing; }
     </style>
 </head>
 <body>
@@ -210,7 +212,7 @@
     </div>
 
     <!-- 底部操作提示 -->
-    <div id="hint">🖱️ 左键点击 → 移动标点<br>🖱️ 右键点击 → 添加路径点</div>
+    <div id="hint">🖱️ 左键点击 → 移动标点 &nbsp;|&nbsp; 🖱️ 右键点击 → 添加路径点 &nbsp;|&nbsp; ✋ 拖动路径点 → 调整位置</div>
 
     <!-- 高德地图 JS API v2 -->
     <script src="https://webapi.amap.com/maps?v=2.0&key=b5192aab67d8024eab148439821c13ee&plugin=AMap.Geocoder"></script>
@@ -221,8 +223,9 @@
         const INIT_LAT = 23.003306;
 
         // === 路径点存储 ===
-        let waypoints = [];           // [{ lng, lat, marker }]
+        let waypoints = [];           // [{ number, lng, lat, marker }]
         let waypointCounter = 0;
+        let waypointLine = null;      // AMap.Polyline 连接线
 
         // === 初始化地图 ===
         const map = new AMap.Map('map', {
@@ -274,6 +277,32 @@
             updateAddress(lng, lat);
         }
 
+        // === 更新路径点连接线 ===
+        function updatePolyline() {
+            // 移除旧线
+            if (waypointLine) {
+                map.remove(waypointLine);
+                waypointLine = null;
+            }
+            // 至少 2 个点才画线
+            if (waypoints.length >= 2) {
+                const path = waypoints.map(wp => [wp.lng, wp.lat]);
+                waypointLine = new AMap.Polyline({
+                    path: path,
+                    strokeColor: '#ff5722',
+                    strokeWeight: 3,
+                    strokeOpacity: 0.75,
+                    strokeStyle: 'solid',
+                    lineJoin: 'round',
+                    lineCap: 'round',
+                    showDir: true,          // 方向箭头
+                    dirColor: '#fff',
+                    zIndex: 50
+                });
+                map.add(waypointLine);
+            }
+        }
+
         // === 更新路径点列表面板 ===
         function updateWaypointPanel() {
             const list = document.getElementById('waypoint-list');
@@ -294,15 +323,31 @@
             }
         }
 
-        // === 创建路径点标记（地图上的编号圆圈） ===
+        // === 创建路径点标记（可拖动） ===
         function createWaypointMarker(lng, lat, number) {
             const marker = new AMap.Marker({
                 position: [lng, lat],
                 content: `<div class="waypoint-marker">${number}</div>`,
                 offset: new AMap.Pixel(-14, -14),
                 zIndex: 90,
-                title: `路径点 ${number}`
+                title: `路径点 ${number}（可拖动）`,
+                draggable: true,
+                raiseOnDrag: true
             });
+
+            // 拖动结束后更新坐标、连线和面板
+            marker.on('dragend', function () {
+                const pos = marker.getPosition();
+                // 找到对应的 waypoint 并更新
+                const wp = waypoints.find(w => w.marker === marker);
+                if (wp) {
+                    wp.lng = pos.getLng();
+                    wp.lat = pos.getLat();
+                    updatePolyline();
+                    updateWaypointPanel();
+                }
+            });
+
             map.add(marker);
             return marker;
         }
@@ -322,6 +367,7 @@
                 marker: marker
             });
 
+            updatePolyline();
             updateWaypointPanel();
         });
 
@@ -350,12 +396,24 @@
             map.setZoom(18);
         }
 
+        // === 重排路径点编号 ===
+        function reindexWaypoints() {
+            waypoints.forEach((wp, i) => {
+                wp.number = i + 1;
+                wp.marker.setContent(`<div class="waypoint-marker">${i + 1}</div>`);
+                wp.marker.setTitle(`路径点 ${i + 1}（可拖动）`);
+            });
+            waypointCounter = waypoints.length;
+        }
+
         // === 删除单个路径点 ===
         function deleteWaypoint(index) {
             const wp = waypoints[index];
             if (!wp) return;
             map.remove(wp.marker);
             waypoints.splice(index, 1);
+            reindexWaypoints();
+            updatePolyline();
             updateWaypointPanel();
         }
 
@@ -364,6 +422,10 @@
             waypoints.forEach(wp => map.remove(wp.marker));
             waypoints = [];
             waypointCounter = 0;
+            if (waypointLine) {
+                map.remove(waypointLine);
+                waypointLine = null;
+            }
             updateWaypointPanel();
         }
 
