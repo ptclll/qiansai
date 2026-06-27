@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地图标点工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body, html { width: 100%; height: 100%; overflow: hidden; }
+
+        #map { width: 100%; height: 100%; }
+
+        /* ===== 坐标信息面板（右上） ===== */
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            z-index: 1000;
+            min-width: 280px;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        #info-panel .title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #4fc3f7;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 6px;
+        }
+
+        #info-panel .label { color: #aaa; font-size: 12px; }
+        #info-panel .value { color: #fff; font-size: 15px; }
+
+        #info-panel .address {
+            color: #ffcc80;
+            font-size: 13px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+        }
+
+        /* ===== 路径点列表面板（左上） ===== */
+        #waypoint-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 16px 18px;
+            border-radius: 10px;
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            font-size: 13px;
+            line-height: 1.8;
+            z-index: 1000;
+            min-width: 220px;
+            max-height: 60vh;
+            overflow-y: auto;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        #waypoint-panel .wp-title {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #ff9800;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #waypoint-list { list-style: none; padding: 0; margin: 0; }
+
+        #waypoint-list li {
+            padding: 6px 8px;
+            margin: 4px 0;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.08);
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #waypoint-list li:hover { background: rgba(255,255,255,0.2); }
+
+        #waypoint-list li .wp-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px; height: 22px;
+            background: #ff5722;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        #waypoint-list li .wp-coords {
+            color: #ccc;
+            flex: 1;
+            white-space: nowrap;
+        }
+
+        #waypoint-list li .wp-delete {
+            color: #f44336;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        #waypoint-list li .wp-delete:hover { opacity: 1; }
+
+        #waypoint-empty {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            padding: 10px 0;
+        }
+
+        /* 清除按钮 */
+        #btn-clear {
+            background: #f44336;
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        #btn-clear:hover { background: #d32f2f; }
+        #btn-clear:disabled { background: #555; cursor: not-allowed; }
+
+        /* ===== 底部提示 ===== */
+        #hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #ccc;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            z-index: 1000;
+            pointer-events: none;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* ===== 路径点地图标记样式 ===== */
+        .waypoint-marker {
+            width: 28px; height: 28px;
+            background: #ff5722;
+            color: #fff;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            font-size: 13px;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            font-family: 'Consolas', 'Monaco', sans-serif;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 地图容器 -->
+    <div id="map"></div>
+
+    <!-- 路径点面板（左上） -->
+    <div id="waypoint-panel">
+        <div class="wp-title">
+            📍 路径点
+            <button id="btn-clear" disabled>一键清除</button>
+        </div>
+        <ul id="waypoint-list">
+            <li id="waypoint-empty">右键地图添加路径点</li>
+        </ul>
+    </div>
+
+    <!-- 坐标信息面板（右上） -->
+    <div id="info-panel">
+        <div class="title">🎯 当前标点</div>
+        <div><span class="label">经度 (DMS): </span><span class="value" id="lng-dms">--</span></div>
+        <div><span class="label">纬度 (DMS): </span><span class="value" id="lat-dms">--</span></div>
+        <div><span class="label">经度 (Dec): </span><span class="value" id="lng-dec">--</span></div>
+        <div><span class="label">纬度 (Dec): </span><span class="value" id="lat-dec">--</span></div>
+        <div class="address" id="address">正在获取地址...</div>
+    </div>
+
+    <!-- 底部操作提示 -->
+    <div id="hint">🖱️ 左键点击 → 移动标点<br>🖱️ 右键点击 → 添加路径点</div>
+
+    <!-- 高德地图 JS API v2 -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=b5192aab67d8024eab148439821c13ee&plugin=AMap.Geocoder"></script>
+
+    <script>
+        // === 初始坐标: 23°00'11.9"N 112°28'41.4"E ===
+        const INIT_LNG = 112.478167;
+        const INIT_LAT = 23.003306;
+
+        // === 路径点存储 ===
+        let waypoints = [];           // [{ lng, lat, marker }]
+        let waypointCounter = 0;
+
+        // === 初始化地图 ===
+        const map = new AMap.Map('map', {
+            zoom: 16,
+            center: [INIT_LNG, INIT_LAT],
+            mapStyle: 'amap://styles/light',
+            resizeEnable: true
+        });
+
+        // === 创建主标点 ===
+        let mainMarker = new AMap.Marker({
+            position: [INIT_LNG, INIT_LAT],
+            title: '标点位置',
+            animation: 'AMAP_ANIMATION_DROP',
+            zIndex: 100
+        });
+        map.add(mainMarker);
+
+        // === 地理编码 ===
+        const geocoder = new AMap.Geocoder();
+
+        function updateAddress(lng, lat) {
+            geocoder.getAddress([lng, lat], (status, result) => {
+                if (status === 'complete' && result.regeocode) {
+                    document.getElementById('address').textContent =
+                        '🏠 ' + result.regeocode.formattedAddress;
+                } else {
+                    document.getElementById('address').textContent = '（未获取到地址）';
+                }
+            });
+        }
+
+        // === 十进制 → 度分秒 ===
+        function toDMS(dec, isLat) {
+            const abs = Math.abs(dec);
+            const d = Math.floor(abs);
+            const m = Math.floor((abs - d) * 60);
+            const s = ((abs - d - m / 60) * 3600).toFixed(1);
+            const direction = isLat ? (dec >= 0 ? 'N' : 'S') : (dec >= 0 ? 'E' : 'W');
+            return `${d}°${String(m).padStart(2, '0')}'${String(s).padStart(4, '0')}"${direction}`;
+        }
+
+        // === 更新主面板 ===
+        function updateMainPanel(lng, lat) {
+            document.getElementById('lng-dms').textContent = toDMS(lng, false);
+            document.getElementById('lat-dms').textContent = toDMS(lat, true);
+            document.getElementById('lng-dec').textContent = lng.toFixed(6);
+            document.getElementById('lat-dec').textContent = lat.toFixed(6);
+            updateAddress(lng, lat);
+        }
+
+        // === 更新路径点列表面板 ===
+        function updateWaypointPanel() {
+            const list = document.getElementById('waypoint-list');
+            const btnClear = document.getElementById('btn-clear');
+
+            if (waypoints.length === 0) {
+                list.innerHTML = '<li id="waypoint-empty">右键地图添加路径点</li>';
+                btnClear.disabled = true;
+            } else {
+                btnClear.disabled = false;
+                list.innerHTML = waypoints.map((wp, i) => `
+                    <li onclick="focusWaypoint(${i})" title="点击定位到该路径点">
+                        <span class="wp-num">${wp.number}</span>
+                        <span class="wp-coords">${wp.lng.toFixed(6)}, ${wp.lat.toFixed(6)}</span>
+                        <span class="wp-delete" onclick="event.stopPropagation(); deleteWaypoint(${i})" title="删除此点">✕</span>
+                    </li>
+                `).join('');
+            }
+        }
+
+        // === 创建路径点标记（地图上的编号圆圈） ===
+        function createWaypointMarker(lng, lat, number) {
+            const marker = new AMap.Marker({
+                position: [lng, lat],
+                content: `<div class="waypoint-marker">${number}</div>`,
+                offset: new AMap.Pixel(-14, -14),
+                zIndex: 90,
+                title: `路径点 ${number}`
+            });
+            map.add(marker);
+            return marker;
+        }
+
+        // === 右键 → 添加路径点 ===
+        map.on('rightclick', function (e) {
+            const lng = e.lnglat.getLng();
+            const lat = e.lnglat.getLat();
+
+            waypointCounter++;
+            const marker = createWaypointMarker(lng, lat, waypointCounter);
+
+            waypoints.push({
+                number: waypointCounter,
+                lng: lng,
+                lat: lat,
+                marker: marker
+            });
+
+            updateWaypointPanel();
+        });
+
+        // === 左键 → 移动主标点 ===
+        map.on('click', function (e) {
+            const lng = e.lnglat.getLng();
+            const lat = e.lnglat.getLat();
+
+            map.remove(mainMarker);
+            mainMarker = new AMap.Marker({
+                position: [lng, lat],
+                title: '标点位置',
+                animation: 'AMAP_ANIMATION_DROP',
+                zIndex: 100
+            });
+            map.add(mainMarker);
+
+            updateMainPanel(lng, lat);
+        });
+
+        // === 聚焦到指定路径点 ===
+        function focusWaypoint(index) {
+            const wp = waypoints[index];
+            if (!wp) return;
+            map.setCenter([wp.lng, wp.lat]);
+            map.setZoom(18);
+        }
+
+        // === 删除单个路径点 ===
+        function deleteWaypoint(index) {
+            const wp = waypoints[index];
+            if (!wp) return;
+            map.remove(wp.marker);
+            waypoints.splice(index, 1);
+            updateWaypointPanel();
+        }
+
+        // === 一键清除所有路径点 ===
+        function clearAllWaypoints() {
+            waypoints.forEach(wp => map.remove(wp.marker));
+            waypoints = [];
+            waypointCounter = 0;
+            updateWaypointPanel();
+        }
+
+        document.getElementById('btn-clear').addEventListener('click', clearAllWaypoints);
+
+        // === 屏蔽浏览器默认右键菜单 ===
+        document.getElementById('map').addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+        });
+
+        // === 初始显示 ===
+        updateMainPanel(INIT_LNG, INIT_LAT);
+        updateWaypointPanel();
+    </script>
+</body>
+</html>
