@@ -11,12 +11,14 @@ Routes:
 """
 
 import os
+import io
 import json
 import shutil
 import asyncio
 import logging
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from PIL import Image
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("map-server")
@@ -29,35 +31,70 @@ IMAGES_DIR = os.path.join(STATIC_DIR, "images")
 
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
-# 允许的图片格式
-IMG_MAGIC = {
-    b'\xff\xd8\xff': '.jpg',       # JPEG
-    b'\x89PNG': '.png',            # PNG
-    b'GIF8': '.gif',               # GIF
-    b'RIFF': '.webp',              # WebP
-    b'BM': '.bmp',                 # BMP
-}
+# 目标尺寸：1080p = 1920×1080 (16:9)
+TARGET_W, TARGET_H = 1920, 1080
+TARGET_RATIO = TARGET_W / TARGET_H  # ≈ 1.778
+JPEG_QUALITY = 85
 
 
-def detect_image_ext(data: bytes) -> str | None:
-    """根据 magic bytes 检测图片格式"""
-    for magic, ext in IMG_MAGIC.items():
-        if data.startswith(magic):
-            return ext
-    return None
+def process_image(data: bytes) -> bytes:
+    """压缩+裁剪到 1920×1080，输出 JPEG"""
+    img = Image.open(io.BytesIO(data))
+
+    # 修正 EXIF 旋转
+    try:
+        from PIL import ImageOps
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+
+    # 转为 RGB（JPEG 不支持透明通道）
+    if img.mode in ('RGBA', 'P', 'LA'):
+        rgb = Image.new('RGB', img.size, (255, 255, 255))
+        if img.mode == 'P':
+            img = img.convert('RGBA')
+        rgb.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+        img = rgb
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    w, h = img.size
+    current_ratio = w / h
+
+    # 如果宽高比偏离 16:9 超过 2%，先居中裁剪
+    if abs(current_ratio - TARGET_RATIO) / TARGET_RATIO > 0.02:
+        if current_ratio > TARGET_RATIO:
+            new_w = int(h * TARGET_RATIO)
+            left = (w - new_w) // 2
+            img = img.crop((left, 0, left + new_w, h))
+        else:
+            new_h = int(w / TARGET_RATIO)
+            top = (h - new_h) // 2
+            img = img.crop((0, top, w, top + new_h))
+        logger.info(f"[IMG] Cropped {w}x{h} → {img.size[0]}x{img.size[1]} (to 16:9)")
+
+    # 如果比目标大，缩小
+    w, h = img.size
+    if w > TARGET_W or h > TARGET_H:
+        img.thumbnail((TARGET_W, TARGET_H), Image.LANCZOS)
+        logger.info(f"[IMG] Resized to {img.size[0]}x{img.size[1]}")
+
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', quality=JPEG_QUALITY, optimize=True)
+    return buf.getvalue()
 
 
 def save_current_image(data: bytes) -> str:
-    """保存图片，删除旧图，返回文件名"""
-    ext = detect_image_ext(data) or '.jpg'
+    """保存图片：压缩裁剪 → 删除旧图 → 写入新图，返回文件名"""
+    processed = process_image(data)
     # 删除旧图片
     for f in os.listdir(IMAGES_DIR):
         os.remove(os.path.join(IMAGES_DIR, f))
-    filename = f"current{ext}"
+    filename = "current.jpg"
     filepath = os.path.join(IMAGES_DIR, filename)
     with open(filepath, 'wb') as f:
-        f.write(data)
-    logger.info(f"[IMG] Saved {filename} ({len(data)} bytes)")
+        f.write(processed)
+    logger.info(f"[IMG] Saved {filename} ({len(data)} → {len(processed)} bytes)")
     return filename
 
 
