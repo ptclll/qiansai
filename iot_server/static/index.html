@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-S3 UART 监视器</title>
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --card: #fff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --blue: #2563eb;
+    --green: #16a34a;
+    --red: #dc2626;
+    --border: #e5e7eb;
+    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .container { max-width: 800px; margin: 0 auto; }
+
+  /* ── Status bar ── */
+  .status-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-radius: 12px;
+    background: var(--card); box-shadow: var(--shadow);
+    margin-bottom: 12px; font-size: 14px;
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.off  { background: var(--red); }
+  .dot.on   { background: var(--green); }
+
+  /* ── Data display ── */
+  .card {
+    background: var(--card); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 16px; margin-bottom: 8px; color: var(--muted); }
+  #uart-log {
+    width: 100%; min-height: 260px; max-height: 50vh;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 14px; line-height: 1.5;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; resize: vertical;
+    background: #fafbfc; color: #1f2937;
+    overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  }
+
+  /* ── Send area ── */
+  .send-row {
+    display: flex; gap: 8px;
+  }
+  #send-input {
+    flex: 1; padding: 10px 12px;
+    font-size: 15px; border: 1px solid var(--border);
+    border-radius: 8px; outline: none;
+    transition: border-color 0.15s;
+  }
+  #send-input:focus { border-color: var(--blue); }
+  .btn {
+    padding: 10px 20px; border: none; border-radius: 8px;
+    font-size: 15px; cursor: pointer; font-weight: 500;
+    transition: background 0.15s, transform 0.1s;
+    color: #fff;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-send { background: var(--blue); }
+  .btn-send:hover { background: #1d4ed8; }
+  .btn-clear { background: var(--muted); }
+  .btn-clear:hover { background: #4b5563; }
+
+  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .preset {
+    padding: 6px 14px; border: 1px solid var(--border);
+    border-radius: 20px; background: #fff; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .preset:hover { background: #eff6ff; border-color: var(--blue); color: var(--blue); }
+
+  /* ── Timestamp ── */
+  .ts { color: var(--muted); font-size: 11px; }
+
+  /* ── Nav bar ── */
+  #nav-bar {
+    position: fixed; top: 0; right: 0; z-index: 9999;
+    display: flex; gap: 0; padding: 10px 16px;
+  }
+  #nav-bar a {
+    display: block; padding: 8px 18px;
+    background: rgba(0,0,0,0.7); color: #ccc;
+    text-decoration: none; font-size: 14px;
+    font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+    backdrop-filter: blur(6px); transition: all 0.2s;
+    border-right: 1px solid rgba(255,255,255,0.1);
+  }
+  #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+  #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+  #nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+  #nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Nav bar -->
+  <nav id="nav-bar">
+    <a href="http://8.148.208.229/">🗺️ 地图</a>
+    <a href="/" class="active">📟 串口监视</a>
+  </nav>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span>ESP32:</span>
+    <span class="dot" id="esp32-dot"></span>
+    <span id="esp32-label">—</span>
+    <span style="margin-left:auto;font-size:13px;color:var(--muted);" id="clock"></span>
+  </div>
+
+  <!-- UART data -->
+  <div class="card">
+    <h2>📟 UART1 实时数据</h2>
+    <div id="uart-log"></div>
+    <div style="margin-top:4px;">
+      <button class="btn btn-clear" onclick="clearLog()">清空</button>
+      <label style="margin-left:12px;font-size:13px;color:var(--muted);">
+        <input type="checkbox" id="auto-scroll" checked> 自动滚动
+      </label>
+    </div>
+  </div>
+
+  <!-- GPS parsed data -->
+  <div class="card" id="gps-card" style="display:none;">
+    <h2>🛰️ GPS 解析数据 <span id="gps-fix-badge" style="font-size:12px;padding:2px 8px;border-radius:10px;margin-left:8px;"></span></h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:14px;">
+      <div><b>纬度:</b> <span id="gps-lat">—</span></div>
+      <div><b>经度:</b> <span id="gps-lon">—</span></div>
+      <div><b>高度:</b> <span id="gps-alt">—</span> m</div>
+      <div><b>定位类型:</b> <span id="gps-fix">—</span></div>
+      <div><b>使用卫星:</b> <span id="gps-sat-used">—</span></div>
+      <div><b>可见卫星:</b> <span id="gps-sat-view">—</span> (GPS:<span id="gps-gps-sat">—</span> BD:<span id="gps-bd-sat">—</span>)</div>
+      <div><b>信号最强:</b> <span id="gps-snr-max">—</span> dBHz</div>
+      <div><b>信号平均:</b> <span id="gps-snr-avg">—</span> dBHz</div>
+      <div><b>PDOP:</b> <span id="gps-pdop">—</span></div>
+      <div><b>HDOP:</b> <span id="gps-hdop">—</span></div>
+      <div><b>VDOP:</b> <span id="gps-vdop">—</span></div>
+      <div><b>天线状态:</b> <span id="gps-ant">—</span></div>
+      <div><b>UTC时间:</b> <span id="gps-time">—</span></div>
+    </div>
+  </div>
+
+  <!-- Send -->
+  <div class="card">
+    <h2>📤 发送到 UART1</h2>
+    <div class="send-row">
+      <input id="send-input" type="text" placeholder="输入要发送的数据…" autocomplete="off"
+             onkeydown="if(event.key==='Enter')sendData()">
+      <button class="btn btn-send" onclick="sendData()">发送</button>
+    </div>
+    <div class="preset-row">
+      <button class="preset" onclick="sendPreset('AT\r\n')">AT</button>
+      <button class="preset" onclick="sendPreset('AT+GMR\r\n')">AT+GMR</button>
+      <button class="preset" onclick="sendPreset('AT+CWLAP\r\n')">AT+CWLAP</button>
+      <button class="preset" onclick="sendPreset('1')">1</button>
+      <button class="preset" onclick="sendPreset('0')">0</button>
+      <button class="preset" onclick="sendPreset('ON')">ON</button>
+      <button class="preset" onclick="sendPreset('OFF')">OFF</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Elements ──
+const logEl    = document.getElementById('uart-log');
+const inputEl  = document.getElementById('send-input');
+const dotEl    = document.getElementById('esp32-dot');
+const labelEl  = document.getElementById('esp32-label');
+const clockEl  = document.getElementById('clock');
+const autoScrollCb = document.getElementById('auto-scroll');
+
+let esp32Online = false;
+
+// ── Clock ──
+setInterval(() => {
+  const now = new Date();
+  clockEl.textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+}, 1000);
+
+// ── WebSocket ──
+const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+// Connect using the same host that served the page
+const wsUrl = `${protocol}//${location.host}/ws/frontend`;
+let ws = null;
+
+function connect() {
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    console.log('Frontend WS connected');
+  };
+  ws.onmessage = (e) => {
+    appendLog(e.data);
+  };
+  ws.onclose = () => {
+    console.log('Frontend WS closed, reconnecting in 2s…');
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = (err) => {
+    console.error('Frontend WS error', err);
+  };
+}
+
+// ── ESP32 status polling (lightweight, every 3s) ──
+async function pollStatus() {
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    const wasOnline = esp32Online;
+    esp32Online = j.esp32_connected;
+    dotEl.className = 'dot ' + (esp32Online ? 'on' : 'off');
+    labelEl.textContent = esp32Online
+      ? '在线'
+      : '离线';
+  } catch (e) {
+    dotEl.className = 'dot off';
+    labelEl.textContent = '—';
+  }
+}
+
+setInterval(pollStatus, 3000);
+pollStatus();
+
+// ── Log helpers ──
+function appendLog(text) {
+  /* Check if it's a JSON GPS message */
+  if (text.startsWith('{') && text.includes('"type":"gps"')) {
+    try {
+      const gps = JSON.parse(text);
+      updateGpsCard(gps);
+      return; /* Don't add JSON to raw log */
+    } catch(e) { /* fall through to raw log */ }
+  }
+
+  const now = new Date();
+  const ts = now.toLocaleTimeString('zh-CN', { hour12: false });
+  const line = `<span class="ts">[${ts}]</span> ${escHtml(text)}`;
+  logEl.innerHTML += line + '\n';
+  if (autoScrollCb.checked) {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+function clearLog() {
+  logEl.innerHTML = '';
+}
+
+function escHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ── Send ──
+function sendData() {
+  const text = inputEl.value;
+  if (!text) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(text);
+    appendLog('→ ' + text);
+    inputEl.value = '';
+    inputEl.focus();
+  } else {
+    appendLog('[SYS] WebSocket 未连接');
+  }
+}
+
+function sendPreset(text) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(text);
+    appendLog('→ ' + text.trim());
+  } else {
+    appendLog('[SYS] WebSocket 未连接');
+  }
+}
+
+// ── GPS card update ──
+const FIX_LABELS = ['无定位', 'GPS', 'DGPS', 'PPS', 'RTK固定', 'RTK浮动', '估算', '手动', '仿真'];
+function updateGpsCard(g) {
+  const card = document.getElementById('gps-card');
+  card.style.display = 'block';
+
+  document.getElementById('gps-time').textContent = g.time || '—';
+  document.getElementById('gps-lat').textContent = (g.lat !== null) ? g.lat + '°' : '—';
+  document.getElementById('gps-lon').textContent = (g.lon !== null) ? g.lon + '°' : '—';
+  document.getElementById('gps-alt').textContent = (g.alt != null) ? g.alt.toFixed(1) : '—';
+  document.getElementById('gps-fix').textContent = FIX_LABELS[g.fix] || ('类型' + g.fix);
+  document.getElementById('gps-sat-used').textContent = g.sat_used ?? '—';
+  document.getElementById('gps-sat-view').textContent = g.sat_view ?? '—';
+  document.getElementById('gps-gps-sat').textContent = g.gps_sat ?? '—';
+  document.getElementById('gps-bd-sat').textContent = g.bd_sat ?? '—';
+  document.getElementById('gps-snr-max').textContent = g.snr_max ?? '—';
+  document.getElementById('gps-snr-avg').textContent = (g.snr_avg != null) ? g.snr_avg.toFixed(1) : '—';
+  document.getElementById('gps-pdop').textContent = (g.pdop != null) ? g.pdop.toFixed(1) : '—';
+  document.getElementById('gps-hdop').textContent = (g.hdop != null) ? g.hdop.toFixed(1) : '—';
+  document.getElementById('gps-vdop').textContent = (g.vdop != null) ? g.vdop.toFixed(1) : '—';
+
+  /* Antenna status */
+  const antEl = document.getElementById('gps-ant');
+  antEl.textContent = g.antenna ? '✅ 正常' : '⚠️ 开路';
+  antEl.style.color = g.antenna ? 'var(--green)' : 'var(--red)';
+
+  /* Fix badge */
+  const badge = document.getElementById('gps-fix-badge');
+  if (g.fix > 0) {
+    badge.textContent = '已定位';
+    badge.style.background = '#dcfce7';
+    badge.style.color = '#166534';
+  } else {
+    badge.textContent = '未定位';
+    badge.style.background = '#fee2e2';
+    badge.style.color = '#991b1b';
+  }
+}
+
+// ── Start ──
+connect();
+</script>
+</body>
+</html>

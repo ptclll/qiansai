@@ -183,9 +183,72 @@
             cursor: grab;
         }
         .waypoint-marker:active { cursor: grabbing; }
+
+        /* ===== 导航栏（右上） ===== */
+        #nav-bar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            z-index: 1002;
+            display: flex;
+            gap: 0;
+            padding: 10px 16px;
+        }
+
+        #nav-bar a {
+            display: block;
+            padding: 8px 18px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ccc;
+            text-decoration: none;
+            font-size: 14px;
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            backdrop-filter: blur(6px);
+            transition: all 0.2s;
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+        #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+
+        #nav-bar a:hover { background: rgba(33, 150, 243, 0.7); color: #fff; }
+        #nav-bar a.active { background: rgba(33, 150, 243, 0.85); color: #fff; font-weight: bold; }
+
+        /* ===== GPS 蓝点标记 ===== */
+        .gps-marker {
+            width: 18px; height: 18px;
+            background: #2196F3;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(33,150,243,0.7), 0 2px 6px rgba(0,0,0,0.4);
+            animation: gps-pulse 2s infinite;
+        }
+
+        @keyframes gps-pulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(33,150,243,0.5), 0 2px 6px rgba(0,0,0,0.4); }
+            50%      { box-shadow: 0 0 20px rgba(33,150,243,0.9), 0 2px 6px rgba(0,0,0,0.4); }
+        }
+
+        /* GPS 状态指示 */
+        #gps-status {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            font-size: 12px;
+            color: #aaa;
+        }
+        #gps-status .gps-online { color: #4caf50; }
+        #gps-status .gps-offline { color: #f44336; }
+        #gps-status .gps-coords { color: #64b5f6; }
     </style>
 </head>
 <body>
+
+    <!-- 导航栏 -->
+    <nav id="nav-bar">
+        <a href="/" class="active" title="交互地图">🗺️ 地图</a>
+        <a href="http://8.148.208.229:8010/" title="串口监视器">📟 串口监视</a>
+    </nav>
 
     <!-- 地图容器 -->
     <div id="map"></div>
@@ -209,10 +272,16 @@
         <div><span class="label">经度 (Dec): </span><span class="value" id="lng-dec">--</span></div>
         <div><span class="label">纬度 (Dec): </span><span class="value" id="lat-dec">--</span></div>
         <div class="address" id="address">正在获取地址...</div>
+        <div id="gps-status">
+            <span id="gps-dot" class="gps-offline">●</span> GPS:
+            <span id="gps-label">等待数据...</span>
+            <br><span class="gps-coords" id="gps-coords"></span>
+        </div>
     </div>
 
     <!-- 底部操作提示 -->
-    <div id="hint">🖱️ 左键点击 → 移动标点 &nbsp;|&nbsp; 🖱️ 右键点击 → 添加路径点 &nbsp;|&nbsp; ✋ 拖动路径点 → 调整位置</div>
+    <!-- 底部操作提示 -->
+    <div id="hint">🖱️ 左键点击 → 移动标点 &nbsp;|&nbsp; 🖱️ 右键点击 → 添加路径点 &nbsp;|&nbsp; ✋ 拖动路径点 → 调整位置 &nbsp;|&nbsp; 🔵 蓝点 = GPS 实时位置</div>
 
     <!-- 高德地图 JS API v2 -->
     <script src="https://webapi.amap.com/maps?v=2.0&key=b5192aab67d8024eab148439821c13ee&plugin=AMap.Geocoder"></script>
@@ -435,6 +504,57 @@
         document.getElementById('map').addEventListener('contextmenu', function (e) {
             e.preventDefault();
         });
+
+        // === GPS 蓝点（WebSocket 实时位置） ===
+        let gpsMarker = null;
+        const IOT_PORT = 8010;
+        const wsUrl = `ws://${location.hostname}:${IOT_PORT}/ws/frontend`;
+
+        function connectGPS() {
+            const ws = new WebSocket(wsUrl);
+            ws.onopen = () => console.log('[GPS] WebSocket connected');
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'gps' && msg.lat != null && msg.lon != null) {
+                        updateGPSMarker(msg.lon, msg.lat, msg);
+                    }
+                } catch (_) { /* non-JSON data, ignore */ }
+            };
+            ws.onclose = () => {
+                console.log('[GPS] WebSocket closed, reconnecting in 3s...');
+                document.getElementById('gps-dot').className = 'gps-offline';
+                document.getElementById('gps-label').textContent = '重连中...';
+                setTimeout(connectGPS, 3000);
+            };
+            ws.onerror = () => {
+                document.getElementById('gps-dot').className = 'gps-offline';
+                document.getElementById('gps-label').textContent = '无法连接 :8010';
+            };
+        }
+
+        function updateGPSMarker(lon, lat, gpsData) {
+            document.getElementById('gps-dot').className = 'gps-online';
+            document.getElementById('gps-label').textContent =
+                `已定位 (${gpsData.fix >= 4 ? 'RTK' : gpsData.fix >= 1 ? 'GPS' : '定位中'})`;
+            document.getElementById('gps-coords').textContent =
+                `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`;
+
+            if (!gpsMarker) {
+                gpsMarker = new AMap.Marker({
+                    position: [lon, lat],
+                    content: '<div class="gps-marker"></div>',
+                    offset: new AMap.Pixel(-9, -9),
+                    zIndex: 95,
+                    title: 'GPS 实时位置'
+                });
+                map.add(gpsMarker);
+            } else {
+                gpsMarker.setPosition([lon, lat]);
+            }
+        }
+
+        connectGPS();
 
         // === 初始显示 ===
         updateMainPanel(INIT_LNG, INIT_LAT);
