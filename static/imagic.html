@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片显示</title>
+    <style>
+        :root {
+            --bg: #0b1121;
+            --card: #111827;
+            --border: #1e293b;
+            --txt: #e2e8f0;
+            --sub: #94a3b8;
+            --blue: #38bdf8;
+            --red: #f87171;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: radial-gradient(ellipse at 50% 0%, #1a2332 0%, var(--bg) 70%);
+            color: var(--txt);
+            font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── 导航栏 ── */
+        #nav-bar {
+            position: fixed;
+            top: 0; right: 0; z-index: 9999;
+            display: flex; gap: 0; padding: 10px 16px;
+        }
+        #nav-bar a {
+            display: block; padding: 8px 18px;
+            background: rgba(0,0,0,0.7); color: #ccc;
+            text-decoration: none; font-size: 14px;
+            backdrop-filter: blur(6px); transition: all 0.2s;
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+        #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+        #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+        #nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+        #nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+
+        /* ── Header ── */
+        header {
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: rgba(17,24,39,0.6);
+            backdrop-filter: blur(12px);
+        }
+        header h1 { font-size: 20px; font-weight: 700; }
+        header h1 span { color: var(--blue); }
+
+        /* ── 主区域 ── */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px;
+            gap: 20px;
+        }
+
+        /* ── 图片容器 ── */
+        .image-container {
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 16 / 9;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transition: opacity 0.4s;
+        }
+        .image-placeholder {
+            color: var(--sub);
+            font-size: 16px;
+            text-align: center;
+            line-height: 1.8;
+        }
+        .image-placeholder svg { opacity: 0.2; margin-bottom: 10px; }
+
+        /* ── 上传区域 ── */
+        .upload-area {
+            width: 100%;
+            max-width: 900px;
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.02);
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--blue);
+            background: rgba(56,189,248,0.08);
+        }
+        .upload-area input[type=file] { display: none; }
+        .upload-area label {
+            cursor: pointer;
+            color: var(--blue);
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .upload-area .hint { color: var(--sub); font-size: 13px; margin-top: 6px; }
+
+        /* ── 底部状态栏 ── */
+        .info-bar {
+            padding: 10px 24px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--sub);
+            border-top: 1px solid var(--border);
+        }
+        .info-bar span { color: var(--blue); }
+        .info-bar .empty { color: #666; }
+    </style>
+</head>
+<body>
+
+    <!-- 导航栏 -->
+    <nav id="nav-bar">
+        <a href="/">🗺️ 地图</a>
+        <a href="http://8.148.208.229:8010/">📟 串口监视</a>
+        <a href="/imagic" class="active">🖼️ 图片</a>
+    </nav>
+
+    <!-- Header -->
+    <header>
+        <h1>🖼️ <span>图片</span>显示</h1>
+    </header>
+
+    <!-- 主区域 -->
+    <main>
+        <!-- 图片显示 -->
+        <div class="image-container" id="imageContainer">
+            <div class="image-placeholder" id="placeholder">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <path d="M21 15l-5-5L5 21"/>
+                </svg>
+                <br>暂无图片，请上传或等待 ESP32 发送
+            </div>
+            <img id="mainImage" src="" alt="" style="display:none">
+        </div>
+
+        <!-- 上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <label for="fileInput">📤 点击上传图片</label>
+            <input type="file" id="fileInput" accept="image/*">
+            <div class="hint">支持 JPG / PNG / GIF / WebP / BMP &nbsp;|&nbsp; 新图片将替换旧图片</div>
+        </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <div class="info-bar" id="infoBar">
+        <span class="empty">等待图片...</span>
+    </div>
+
+    <script>
+        const img = document.getElementById('mainImage');
+        const placeholder = document.getElementById('placeholder');
+        const infoBar = document.getElementById('infoBar');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        let currentImage = null;
+
+        // ── 刷新当前图片 ──
+        async function refreshImage() {
+            try {
+                const resp = await fetch('/api/current_image');
+                const data = await resp.json();
+
+                if (!data.image) {
+                    img.style.display = 'none';
+                    placeholder.style.display = 'block';
+                    infoBar.innerHTML = '<span class="empty">等待图片...</span>';
+                    currentImage = null;
+                    return;
+                }
+
+                const src = `/images/${data.image}?t=${Date.now()}`;
+                if (src !== currentImage) {
+                    currentImage = src;
+                    placeholder.style.display = 'none';
+                    img.style.display = 'block';
+                    img.style.opacity = '0';
+                    img.src = src;
+                    img.onload = () => { img.style.opacity = '1'; };
+                }
+
+                const sizeKB = (data.size / 1024).toFixed(1);
+                const mtime = new Date(data.mtime * 1000).toLocaleString('zh-CN');
+                infoBar.innerHTML = `📷 <span>${data.image}</span> &nbsp;|&nbsp; ${sizeKB} KB &nbsp;|&nbsp; 更新于 ${mtime}`;
+            } catch (e) {
+                console.error('图片刷新失败:', e);
+            }
+        }
+
+        // ── 上传 ──
+        uploadArea.addEventListener('click', (e) => {
+            if (e.target !== fileInput) fileInput.click();
+        });
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (file) {
+                uploadFile(file);
+                fileInput.value = '';
+            }
+        });
+
+        async function uploadFile(file) {
+            infoBar.innerHTML = '⏳ 上传中...';
+            const form = new FormData();
+            form.append('file', file);
+            try {
+                const resp = await fetch('/api/upload_image', { method: 'POST', body: form });
+                const data = await resp.json();
+                if (data.ok) {
+                    infoBar.innerHTML = '✅ 上传成功！刷新中...';
+                    setTimeout(refreshImage, 300);
+                } else {
+                    infoBar.innerHTML = '❌ 上传失败';
+                }
+            } catch (e) {
+                infoBar.innerHTML = '❌ 网络错误';
+            }
+        }
+
+        // ── 轮询刷新 ──
+        refreshImage();
+        setInterval(refreshImage, 2000);
+    </script>
+</body>
+</html>
