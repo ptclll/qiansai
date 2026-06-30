@@ -125,6 +125,7 @@
     <span class="dot" id="esp32-dot"></span>
     <span id="esp32-label">—</span>
     <span style="margin-left:auto;font-size:13px;color:var(--muted);" id="clock"></span>
+    <span id="az-display" style="margin-left:12px;font-size:14px;font-weight:bold;color:var(--blue);">🧭 —°</span>
   </div>
 
   <!-- UART data -->
@@ -247,8 +248,19 @@ function appendLog(text) {
     try {
       const gps = JSON.parse(text);
       updateGpsCard(gps);
-      return; /* Don't add JSON to raw log */
+      return;
     } catch(e) { /* fall through to raw log */ }
+  }
+
+  /* Extract azimuth from mag/imu JSON */
+  if (text.startsWith('{') && (text.includes('"type":"mag"') || text.includes('"type":"imu"'))) {
+    try {
+      const obj = JSON.parse(text);
+      if (obj.azimuth != null) {
+        document.getElementById('az-display').textContent = '🧭 ' + obj.azimuth.toFixed(1) + '°';
+      }
+      return; /* Don't add to raw log */
+    } catch(e) { /* fall through */ }
   }
 
   const now = new Date();

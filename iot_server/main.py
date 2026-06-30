@@ -12,6 +12,8 @@ Data flow:
 """
 
 import asyncio
+import json
+import math
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -78,6 +80,32 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+# ── Azimuth enrichment ────────────────────────────────────────
+def enrich_mag_json(text: str) -> str | None:
+    """Parse mag/imu JSON and compute azimuth from mag_x/mag_y."""
+    try:
+        obj = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    t = obj.get("type")
+    if t not in ("mag", "imu"):
+        return None
+
+    mag = obj.get("mag")
+    if not isinstance(mag, list) or len(mag) < 2:
+        return None
+
+    x, y = mag[0], mag[1]
+    az_deg = math.degrees(math.atan2(y, x))
+    if az_deg < 0:
+        az_deg += 360.0
+
+    obj["azimuth"] = round(az_deg, 2)
+    return json.dumps(obj, separators=(",", ":"))
+
+
 # ── WebSocket Endpoints ───────────────────────────────────────
 @app.websocket("/ws/esp32")
 async def ws_esp32(websocket: WebSocket):
@@ -94,7 +122,8 @@ async def ws_esp32(websocket: WebSocket):
                 text = msg["bytes"].decode("utf-8", errors="replace")
             else:
                 continue
-            await manager.broadcast_to_frontends(text)
+            enriched = enrich_mag_json(text)
+            await manager.broadcast_to_frontends(enriched if enriched else text)
     except WebSocketDisconnect:
         pass
     except Exception as e:

@@ -508,6 +508,7 @@
 
         // === GPS 蓝点（WebSocket 实时位置） ===
         let gpsMarker = null;
+        let currentAzimuth = null;
         const IOT_PORT = 8010;
         const wsUrl = `ws://${location.hostname}:${IOT_PORT}/ws/frontend`;
 
@@ -560,6 +561,11 @@
                     if (msg.type === 'gps' && msg.lat != null && msg.lon != null) {
                         updateGPSMarker(msg.lon, msg.lat, msg);
                     }
+                    // 提取 azimuth（来自 mag / imu 消息，后端已 enrich）
+                    if (msg.azimuth != null) {
+                        currentAzimuth = msg.azimuth;
+                        updateGPSArrow();
+                    }
                 } catch (_) { /* non-JSON data, ignore */ }
             };
             ws.onclose = () => {
@@ -587,10 +593,16 @@
                 `WGS84: ${lat.toFixed(6)}°, ${lon.toFixed(6)}°<br>` +
                 `GCJ02: ${gcjLat.toFixed(6)}°, ${gcjLon.toFixed(6)}°`;
 
+            const az = currentAzimuth != null ? currentAzimuth : 0;
+            const arrowVis = currentAzimuth != null ? '' : 'display:none';
+            const html = '<div style="position:relative">' +
+                `<div id="gps-arrow-el" style="position:absolute;left:50%;bottom:100%;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:14px solid #fff;transform:translateX(-50%) rotate(${az}deg);transform-origin:center bottom;${arrowVis}"></div>` +
+                '<div class="gps-marker"></div></div>';
+
             if (!gpsMarker) {
                 gpsMarker = new AMap.Marker({
                     position: [gcjLon, gcjLat],
-                    content: '<div class="gps-marker"></div>',
+                    content: html,
                     offset: new AMap.Pixel(-9, -9),
                     zIndex: 95,
                     title: 'GPS 实时位置 (已转 GCJ-02)'
@@ -598,6 +610,18 @@
                 map.add(gpsMarker);
             } else {
                 gpsMarker.setPosition([gcjLon, gcjLat]);
+                gpsMarker.setContent(html);
+            }
+        }
+
+        function updateGPSArrow() {
+            const arrow = document.getElementById('gps-arrow-el');
+            if (!arrow) return;
+            if (currentAzimuth != null) {
+                arrow.style.display = 'block';
+                arrow.style.transform = `translateX(-50%) rotate(${currentAzimuth}deg)`;
+            } else {
+                arrow.style.display = 'none';
             }
         }
 
