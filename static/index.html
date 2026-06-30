@@ -240,6 +240,41 @@
         #gps-status .gps-online { color: #4caf50; }
         #gps-status .gps-offline { color: #f44336; }
         #gps-status .gps-coords { color: #64b5f6; }
+
+        /* ===== 罗盘 ===== */
+        #compass-box {
+            position: absolute; top: 20px; left: 260px;
+            background: rgba(0,0,0,0.7); border-radius: 10px;
+            padding: 6px; z-index: 1000; text-align: center;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+        #compass-face {
+            width: 70px; height: 70px; position: relative;
+            border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.04);
+        }
+        #compass-face .mark { position: absolute; font-size: 10px; font-weight: bold; font-family: Consolas,monospace; color: #888; }
+        #compass-face .mark.n { top: 3px; left: 50%; transform: translateX(-50%); color: #f66; }
+        #compass-face .mark.s { bottom: 3px; left: 50%; transform: translateX(-50%); }
+        #compass-face .mark.e { right: 5px; top: 50%; transform: translateY(-50%); }
+        #compass-face .mark.w { left: 5px; top: 50%; transform: translateY(-50%); }
+        #compass-needle {
+            position: absolute; top: 50%; left: 50%;
+            width: 0; height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 24px solid #ff5722;
+            transform-origin: 50% 100%;
+            transform: translate(-50%, -100%) rotate(0deg);
+            transition: transform 0.12s linear;
+        }
+        #compass-dot {
+            position: absolute; top: 50%; left: 50%;
+            width: 5px; height: 5px; background: #fff;
+            border-radius: 50%; transform: translate(-50%, -50%);
+        }
+        #compass-val { color: #fff; font-size: 13px; font-weight: bold; font-family: Consolas,monospace; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -263,6 +298,16 @@
         <ul id="waypoint-list">
             <li id="waypoint-empty">右键地图添加路径点</li>
         </ul>
+    </div>
+
+    <!-- 罗盘 -->
+    <div id="compass-box">
+        <div id="compass-face">
+            <span class="mark n">N</span><span class="mark s">S</span><span class="mark e">E</span><span class="mark w">W</span>
+            <div id="compass-needle"></div>
+            <div id="compass-dot"></div>
+        </div>
+        <div id="compass-val">--°</div>
     </div>
 
     <!-- 坐标信息面板（右上） -->
@@ -565,6 +610,10 @@
                     if (msg.azimuth != null) {
                         currentAzimuth = msg.azimuth;
                         updateGPSArrow();
+                        // 罗盘
+                        document.getElementById('compass-needle').style.transform =
+                            `translate(-50%, -100%) rotate(${currentAzimuth}deg)`;
+                        document.getElementById('compass-val').textContent = currentAzimuth.toFixed(1) + '°';
                     }
                 } catch (_) { /* non-JSON data, ignore */ }
             };
