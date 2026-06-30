@@ -252,15 +252,15 @@ function appendLog(text) {
     } catch(e) { /* fall through to raw log */ }
   }
 
-  /* Extract azimuth from mag/imu JSON */
+  /* Extract azimuth from mag/imu JSON without blocking raw display */
   if (text.startsWith('{') && (text.includes('"type":"mag"') || text.includes('"type":"imu"'))) {
     try {
       const obj = JSON.parse(text);
       if (obj.azimuth != null) {
         document.getElementById('az-display').textContent = '🧭 ' + obj.azimuth.toFixed(1) + '°';
       }
-      return; /* Don't add to raw log */
-    } catch(e) { /* fall through */ }
+    } catch(e) { /* ignore parse errors */ }
+    /* fall through — still show raw mag data in log */
   }
 
   const now = new Date();
