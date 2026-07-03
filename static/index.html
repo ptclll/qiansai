@@ -5,281 +5,177 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>地图标点工具</title>
     <style>
+        :root {
+            --bg: #f0f2f5;
+            --card: #fff;
+            --text: #1a1a2e;
+            --muted: #6b7280;
+            --blue: #2563eb;
+            --green: #16a34a;
+            --red: #dc2626;
+            --border: #e5e7eb;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body, html { width: 100%; height: 100%; overflow: hidden; }
 
         #map { width: 100%; height: 100%; }
 
-        /* ===== 坐标信息面板（右上） ===== */
-        #info-panel {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.75);
-            color: #fff;
-            padding: 16px 20px;
-            border-radius: 10px;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.8;
-            z-index: 1000;
-            min-width: 280px;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        }
-
-        #info-panel .title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: #4fc3f7;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            padding-bottom: 6px;
-        }
-
-        #info-panel .label { color: #aaa; font-size: 12px; }
-        #info-panel .value { color: #fff; font-size: 15px; }
-
-        #info-panel .address {
-            color: #ffcc80;
-            font-size: 13px;
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px solid rgba(255,255,255,0.15);
-        }
-
-        /* ===== 路径点列表面板（左上） ===== */
-        #waypoint-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.75);
-            color: #fff;
-            padding: 16px 18px;
-            border-radius: 10px;
-            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-            font-size: 13px;
-            line-height: 1.8;
-            z-index: 1000;
-            min-width: 220px;
-            max-height: 60vh;
-            overflow-y: auto;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        }
-
-        #waypoint-panel .wp-title {
-            font-size: 15px;
-            font-weight: bold;
-            margin-bottom: 4px;
-            color: #ff9800;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            padding-bottom: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        #waypoint-list { list-style: none; padding: 0; margin: 0; }
-
-        #waypoint-list li {
-            padding: 6px 8px;
-            margin: 4px 0;
-            border-radius: 6px;
-            background: rgba(255,255,255,0.08);
-            font-size: 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        #waypoint-list li:hover { background: rgba(255,255,255,0.2); }
-
-        #waypoint-list li .wp-num {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px; height: 22px;
-            background: #ff5722;
-            color: #fff;
-            border-radius: 50%;
-            font-size: 11px;
-            font-weight: bold;
-            flex-shrink: 0;
-        }
-
-        #waypoint-list li .wp-coords {
-            color: #ccc;
-            flex: 1;
-            white-space: nowrap;
-        }
-
-        #waypoint-list li .wp-delete {
-            color: #f44336;
-            font-size: 16px;
-            cursor: pointer;
-            padding: 0 4px;
-            opacity: 0.6;
-            transition: opacity 0.2s;
-        }
-        #waypoint-list li .wp-delete:hover { opacity: 1; }
-
-        #waypoint-empty {
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-            padding: 10px 0;
-        }
-
-        /* 清除按钮 */
-        #btn-clear {
-            background: #f44336;
-            color: #fff;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 5px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-            white-space: nowrap;
-        }
-        #btn-clear:hover { background: #d32f2f; }
-        #btn-clear:disabled { background: #555; cursor: not-allowed; }
-
-        /* ===== 底部提示 ===== */
-        #hint {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #ccc;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 13px;
-            z-index: 1000;
-            pointer-events: none;
-            text-align: center;
-            line-height: 1.6;
-        }
-
-        /* ===== 路径点地图标记样式 ===== */
-        .waypoint-marker {
-            width: 28px; height: 28px;
-            background: #ff5722;
-            color: #fff;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 28px;
-            font-weight: bold;
-            font-size: 13px;
-            border: 2px solid #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-            font-family: 'Consolas', 'Monaco', sans-serif;
-            pointer-events: auto;
-            cursor: grab;
-        }
-        .waypoint-marker:active { cursor: grabbing; }
-
-        /* ===== 导航栏（右上） ===== */
+        /* ═══════════ Nav bar ═══════════ */
         #nav-bar {
-            position: absolute;
-            top: 0;
-            right: 0;
-            z-index: 1002;
-            display: flex;
-            gap: 0;
-            padding: 10px 16px;
+            position: absolute; top: 0; right: 0; z-index: 1002;
+            display: flex; gap: 0; padding: 8px 14px;
         }
-
         #nav-bar a {
-            display: block;
-            padding: 8px 18px;
-            background: rgba(0, 0, 0, 0.7);
-            color: #ccc;
-            text-decoration: none;
-            font-size: 14px;
-            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-            backdrop-filter: blur(6px);
-            transition: all 0.2s;
-            border-right: 1px solid rgba(255,255,255,0.1);
+            display: block; padding: 7px 16px;
+            background: rgba(30,41,59,0.88); color: #cbd5e1;
+            text-decoration: none; font-size: 13px;
+            font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+            backdrop-filter: blur(6px); transition: all 0.2s;
+            border-right: 1px solid rgba(255,255,255,0.1); white-space: nowrap;
         }
-
         #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
         #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+        #nav-bar a:hover { background: rgba(37,99,235,0.75); color: #fff; }
+        #nav-bar a.active { background: rgba(37,99,235,0.85); color: #fff; font-weight: bold; }
 
-        #nav-bar a:hover { background: rgba(33, 150, 243, 0.7); color: #fff; }
-        #nav-bar a.active { background: rgba(33, 150, 243, 0.85); color: #fff; font-weight: bold; }
-
-        /* ===== GPS 蓝点标记 ===== */
-        .gps-marker {
-            width: 18px; height: 18px;
-            background: #2196F3;
-            border: 3px solid #fff;
-            border-radius: 50%;
-            box-shadow: 0 0 12px rgba(33,150,243,0.7), 0 2px 6px rgba(0,0,0,0.4);
-            animation: gps-pulse 2s infinite;
+        /* ═══════════ Panels — light theme ═══════════ */
+        .panel {
+            position: absolute; z-index: 1000;
+            background: rgba(255,255,255,0.94);
+            backdrop-filter: blur(12px);
+            color: var(--text); border-radius: 12px;
+            box-shadow: var(--shadow);
+            font-family: 'Segoe UI','Microsoft YaHei',sans-serif;
+            font-size: 13px; line-height: 1.7;
         }
 
-        @keyframes gps-pulse {
-            0%, 100% { box-shadow: 0 0 8px rgba(33,150,243,0.5), 0 2px 6px rgba(0,0,0,0.4); }
-            50%      { box-shadow: 0 0 20px rgba(33,150,243,0.9), 0 2px 6px rgba(0,0,0,0.4); }
+        /* ── Info panel (right) ── */
+        #info-panel {
+            top: 48px; right: 16px;
+            padding: 16px 18px; min-width: 260px;
+        }
+        #info-panel .title {
+            font-size: 15px; font-weight: 700; margin-bottom: 8px;
+            color: var(--blue); border-bottom: 1px solid var(--border); padding-bottom: 6px;
+        }
+        #info-panel .label { color: var(--muted); font-size: 11px; }
+        #info-panel .value { color: var(--text); font-size: 14px; font-weight: 500; }
+        #info-panel .address {
+            color: #d97706; font-size: 12px; margin-top: 6px; padding-top: 6px;
+            border-top: 1px solid var(--border);
         }
 
-        /* GPS 状态指示 */
-        #gps-status {
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px solid rgba(255,255,255,0.15);
-            font-size: 12px;
-            color: #aaa;
+        /* ── Waypoint panel (left) ── */
+        #waypoint-panel {
+            top: 48px; left: 16px;
+            padding: 14px 16px; min-width: 210px; max-height: 55vh; overflow-y: auto;
         }
-        #gps-status .gps-online { color: #4caf50; }
-        #gps-status .gps-offline { color: #f44336; }
-        #gps-status .gps-coords { color: #64b5f6; }
+        #waypoint-panel .wp-title {
+            font-size: 14px; font-weight: 700; margin-bottom: 6px;
+            color: #ea580c; border-bottom: 1px solid var(--border); padding-bottom: 6px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        #waypoint-list { list-style: none; padding: 0; margin: 0; }
+        #waypoint-list li {
+            padding: 5px 8px; margin: 3px 0; border-radius: 8px;
+            background: #f8fafc; font-size: 12px; cursor: pointer;
+            transition: background 0.15s; display: flex; align-items: center; gap: 6px;
+            border: 1px solid transparent;
+        }
+        #waypoint-list li:hover { background: #eff6ff; border-color: var(--blue); }
+        #waypoint-list li .wp-num {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; background: #ea580c; color: #fff;
+            border-radius: 50%; font-size: 11px; font-weight: 700; flex-shrink: 0;
+        }
+        #waypoint-list li .wp-coords { color: var(--text); flex: 1; white-space: nowrap; font-family: Consolas,monospace; }
+        #waypoint-list li .wp-delete {
+            color: var(--red); font-size: 15px; cursor: pointer; padding: 0 4px; opacity: 0.5;
+        }
+        #waypoint-list li .wp-delete:hover { opacity: 1; }
+        #waypoint-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0; }
 
-        /* ===== 罗盘 ===== */
+        #btn-clear {
+            background: var(--red); color: #fff; border: none;
+            padding: 5px 12px; border-radius: 6px; font-size: 11px;
+            cursor: pointer; white-space: nowrap;
+        }
+        #btn-clear:hover { background: #b91c1c; }
+        #btn-clear:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* ── Compass (near waypoint panel) ── */
         #compass-box {
-            position: absolute; top: 20px; left: 260px;
-            background: rgba(0,0,0,0.7); border-radius: 10px;
-            padding: 6px; z-index: 1000; text-align: center;
-            backdrop-filter: blur(6px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            position: absolute; top: 48px; left: 254px; z-index: 1000;
+            background: rgba(255,255,255,0.92); border-radius: 10px;
+            padding: 5px; text-align: center;
+            box-shadow: var(--shadow); backdrop-filter: blur(10px);
         }
         #compass-face {
-            width: 70px; height: 70px; position: relative;
-            border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
-            background: rgba(255,255,255,0.04);
+            width: 58px; height: 58px; position: relative;
+            border-radius: 50%; border: 2px solid var(--border);
+            background: #f8fafc;
         }
-        #compass-face .mark { position: absolute; font-size: 10px; font-weight: bold; font-family: Consolas,monospace; color: #888; }
-        #compass-face .mark.n { top: 3px; left: 50%; transform: translateX(-50%); color: #f66; }
+        #compass-face .mark { position: absolute; font-size: 9px; font-weight: 700; font-family: Consolas,monospace; color: var(--muted); }
+        #compass-face .mark.n { top: 3px; left: 50%; transform: translateX(-50%); color: var(--red); }
         #compass-face .mark.s { bottom: 3px; left: 50%; transform: translateX(-50%); }
-        #compass-face .mark.e { right: 5px; top: 50%; transform: translateY(-50%); }
-        #compass-face .mark.w { left: 5px; top: 50%; transform: translateY(-50%); }
+        #compass-face .mark.e { right: 4px; top: 50%; transform: translateY(-50%); }
+        #compass-face .mark.w { left: 4px; top: 50%; transform: translateY(-50%); }
         #compass-needle {
             position: absolute; top: 50%; left: 50%;
             width: 0; height: 0;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 24px solid #ff5722;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 20px solid #ea580c;
             transform-origin: 50% 100%;
             transform: translate(-50%, -100%) rotate(0deg);
             transition: transform 0.12s linear;
         }
         #compass-dot {
             position: absolute; top: 50%; left: 50%;
-            width: 5px; height: 5px; background: #fff;
+            width: 4px; height: 4px; background: var(--text);
             border-radius: 50%; transform: translate(-50%, -50%);
         }
-        #compass-val { color: #fff; font-size: 13px; font-weight: bold; font-family: Consolas,monospace; margin-top: 2px; }
+        #compass-val { color: var(--text); font-size: 11px; font-weight: 700; font-family: Consolas,monospace; margin-top: 2px; }
+
+        /* ── GPS status in info panel ── */
+        #gps-status { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 12px; }
+        #gps-status .gps-online { color: var(--green); font-weight: 600; }
+        #gps-status .gps-offline { color: var(--red); font-weight: 600; }
+        #gps-status .gps-coords { color: var(--blue); font-size: 11px; }
+
+        /* ── Bottom hint ── */
+        #hint {
+            position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
+            color: var(--muted); padding: 8px 20px; border-radius: 20px;
+            font-size: 12px; z-index: 1000; pointer-events: none; text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        /* ── GPS marker ── */
+        .gps-marker {
+            width: 18px; height: 18px;
+            background: var(--blue);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(37,99,235,0.6), 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .waypoint-marker {
+            width: 28px; height: 28px;
+            background: #ea580c; color: #fff;
+            border-radius: 50%; text-align: center; line-height: 28px;
+            font-weight: 700; font-size: 13px;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-family: Consolas,monospace; pointer-events: auto; cursor: grab;
+        }
+        .waypoint-marker:active { cursor: grabbing; }
     </style>
 </head>
 <body>
 
-    <!-- 导航栏 -->
     <nav id="nav-bar">
         <a href="/" class="active" title="交互地图">🗺️ 地图</a>
         <a href="http://8.148.208.229:8010/" title="串口监视器">📟 串口</a>
@@ -287,21 +183,18 @@
         <a href="http://8.148.208.229:8010/control" title="ESP32 控制">🎮 控制</a>
     </nav>
 
-    <!-- 地图容器 -->
     <div id="map"></div>
 
-    <!-- 路径点面板（左上） -->
-    <div id="waypoint-panel">
+    <div id="waypoint-panel" class="panel">
         <div class="wp-title">
             📍 路径点
-            <button id="btn-clear" disabled>一键清除</button>
+            <button id="btn-clear" disabled>清除</button>
         </div>
         <ul id="waypoint-list">
             <li id="waypoint-empty">右键地图添加路径点</li>
         </ul>
     </div>
 
-    <!-- 罗盘 -->
     <div id="compass-box">
         <div id="compass-face">
             <span class="mark n">N</span><span class="mark s">S</span><span class="mark e">E</span><span class="mark w">W</span>
@@ -311,14 +204,13 @@
         <div id="compass-val">--°</div>
     </div>
 
-    <!-- 坐标信息面板（右上） -->
-    <div id="info-panel">
+    <div id="info-panel" class="panel">
         <div class="title">🎯 当前标点</div>
         <div><span class="label">经度 (DMS): </span><span class="value" id="lng-dms">--</span></div>
         <div><span class="label">纬度 (DMS): </span><span class="value" id="lat-dms">--</span></div>
         <div><span class="label">经度 (Dec): </span><span class="value" id="lng-dec">--</span></div>
         <div><span class="label">纬度 (Dec): </span><span class="value" id="lat-dec">--</span></div>
-        <div class="address" id="address">正在获取地址...</div>
+        <div class="address" id="address">获取地址...</div>
         <div id="gps-status">
             <span id="gps-dot" class="gps-offline">●</span> GPS:
             <span id="gps-label">等待数据...</span>
@@ -326,360 +218,220 @@
         </div>
     </div>
 
-    <!-- 底部操作提示 -->
-    <!-- 底部操作提示 -->
     <div id="hint">🖱️ 左键点击 → 移动标点 &nbsp;|&nbsp; 🖱️ 右键点击 → 添加路径点 &nbsp;|&nbsp; ✋ 拖动路径点 → 调整位置 &nbsp;|&nbsp; 🔵 蓝点 = GPS 实时位置</div>
 
-    <!-- 高德地图 JS API v2 -->
     <script src="https://webapi.amap.com/maps?v=2.0&key=b5192aab67d8024eab148439821c13ee&plugin=AMap.Geocoder"></script>
-
     <script>
-        // === 初始坐标: 23°00'11.9"N 112°28'41.4"E ===
-        const INIT_LNG = 112.478167;
-        const INIT_LAT = 23.003306;
+    const INIT_LNG = 112.478167, INIT_LAT = 23.003306;
+    let waypoints = [], waypointCounter = 0, waypointLine = null;
 
-        // === 路径点存储 ===
-        let waypoints = [];           // [{ number, lng, lat, marker }]
-        let waypointCounter = 0;
-        let waypointLine = null;      // AMap.Polyline 连接线
+    const map = new AMap.Map('map', {
+        zoom: 16, center: [INIT_LNG, INIT_LAT],
+        mapStyle: 'amap://styles/light', resizeEnable: true
+    });
 
-        // === 初始化地图 ===
-        const map = new AMap.Map('map', {
-            zoom: 16,
-            center: [INIT_LNG, INIT_LAT],
-            mapStyle: 'amap://styles/light',
-            resizeEnable: true
+    let mainMarker = new AMap.Marker({
+        position: [INIT_LNG, INIT_LAT], title: '标点位置',
+        animation: 'AMAP_ANIMATION_DROP', zIndex: 100
+    });
+    map.add(mainMarker);
+
+    const geocoder = new AMap.Geocoder();
+    function updateAddress(lng, lat) {
+        geocoder.getAddress([lng, lat], (status, result) => {
+            if (status === 'complete' && result.regeocode) {
+                document.getElementById('address').textContent = '🏠 ' + result.regeocode.formattedAddress;
+            } else {
+                document.getElementById('address').textContent = '（未获取到地址）';
+            }
         });
+    }
 
-        // === 创建主标点 ===
-        let mainMarker = new AMap.Marker({
-            position: [INIT_LNG, INIT_LAT],
-            title: '标点位置',
-            animation: 'AMAP_ANIMATION_DROP',
-            zIndex: 100
+    function toDMS(dec, isLat) {
+        const abs = Math.abs(dec);
+        const d = Math.floor(abs), m = Math.floor((abs - d) * 60);
+        const s = ((abs - d - m / 60) * 3600).toFixed(1);
+        return `${d}°${String(m).padStart(2,'0')}'${String(s).padStart(4,'0')}"${isLat ? (dec >= 0 ? 'N' : 'S') : (dec >= 0 ? 'E' : 'W')}`;
+    }
+
+    function updateMainPanel(lng, lat) {
+        document.getElementById('lng-dms').textContent = toDMS(lng, false);
+        document.getElementById('lat-dms').textContent = toDMS(lat, true);
+        document.getElementById('lng-dec').textContent = lng.toFixed(6);
+        document.getElementById('lat-dec').textContent = lat.toFixed(6);
+        updateAddress(lng, lat);
+    }
+
+    function updatePolyline() {
+        if (waypointLine) { map.remove(waypointLine); waypointLine = null; }
+        if (waypoints.length >= 2) {
+            waypointLine = new AMap.Polyline({
+                path: waypoints.map(wp => [wp.lng, wp.lat]),
+                strokeColor: '#ea580c', strokeWeight: 3, strokeOpacity: 0.75,
+                strokeStyle: 'solid', lineJoin: 'round', lineCap: 'round',
+                showDir: true, dirColor: '#fff', zIndex: 50
+            });
+            map.add(waypointLine);
+        }
+    }
+
+    function updateWaypointPanel() {
+        const list = document.getElementById('waypoint-list');
+        const btnClear = document.getElementById('btn-clear');
+        if (waypoints.length === 0) {
+            list.innerHTML = '<li id="waypoint-empty">右键地图添加路径点</li>';
+            btnClear.disabled = true;
+        } else {
+            btnClear.disabled = false;
+            list.innerHTML = waypoints.map((wp, i) =>
+                `<li onclick="focusWaypoint(${i})"><span class="wp-num">${wp.number}</span><span class="wp-coords">${wp.lng.toFixed(6)}, ${wp.lat.toFixed(6)}</span><span class="wp-delete" onclick="event.stopPropagation();deleteWaypoint(${i})">✕</span></li>`
+            ).join('');
+        }
+    }
+
+    function createWaypointMarker(lng, lat, number) {
+        const marker = new AMap.Marker({
+            position: [lng, lat],
+            content: `<div class="waypoint-marker">${number}</div>`,
+            offset: new AMap.Pixel(-14, -14), zIndex: 90,
+            title: `路径点 ${number}（可拖动）`, draggable: true, raiseOnDrag: true
         });
+        marker.on('dragend', () => {
+            const pos = marker.getPosition();
+            const wp = waypoints.find(w => w.marker === marker);
+            if (wp) { wp.lng = pos.getLng(); wp.lat = pos.getLat(); updatePolyline(); updateWaypointPanel(); }
+        });
+        map.add(marker);
+        return marker;
+    }
+
+    map.on('rightclick', (e) => {
+        const lng = e.lnglat.getLng(), lat = e.lnglat.getLat();
+        waypointCounter++;
+        const marker = createWaypointMarker(lng, lat, waypointCounter);
+        waypoints.push({ number: waypointCounter, lng, lat, marker });
+        updatePolyline(); updateWaypointPanel();
+    });
+
+    map.on('click', (e) => {
+        const lng = e.lnglat.getLng(), lat = e.lnglat.getLat();
+        map.remove(mainMarker);
+        mainMarker = new AMap.Marker({ position: [lng, lat], title: '标点位置', animation: 'AMAP_ANIMATION_DROP', zIndex: 100 });
         map.add(mainMarker);
+        updateMainPanel(lng, lat);
+    });
 
-        // === 地理编码 ===
-        const geocoder = new AMap.Geocoder();
-
-        function updateAddress(lng, lat) {
-            geocoder.getAddress([lng, lat], (status, result) => {
-                if (status === 'complete' && result.regeocode) {
-                    document.getElementById('address').textContent =
-                        '🏠 ' + result.regeocode.formattedAddress;
-                } else {
-                    document.getElementById('address').textContent = '（未获取到地址）';
-                }
-            });
-        }
-
-        // === 十进制 → 度分秒 ===
-        function toDMS(dec, isLat) {
-            const abs = Math.abs(dec);
-            const d = Math.floor(abs);
-            const m = Math.floor((abs - d) * 60);
-            const s = ((abs - d - m / 60) * 3600).toFixed(1);
-            const direction = isLat ? (dec >= 0 ? 'N' : 'S') : (dec >= 0 ? 'E' : 'W');
-            return `${d}°${String(m).padStart(2, '0')}'${String(s).padStart(4, '0')}"${direction}`;
-        }
-
-        // === 更新主面板 ===
-        function updateMainPanel(lng, lat) {
-            document.getElementById('lng-dms').textContent = toDMS(lng, false);
-            document.getElementById('lat-dms').textContent = toDMS(lat, true);
-            document.getElementById('lng-dec').textContent = lng.toFixed(6);
-            document.getElementById('lat-dec').textContent = lat.toFixed(6);
-            updateAddress(lng, lat);
-        }
-
-        // === 更新路径点连接线 ===
-        function updatePolyline() {
-            // 移除旧线
-            if (waypointLine) {
-                map.remove(waypointLine);
-                waypointLine = null;
-            }
-            // 至少 2 个点才画线
-            if (waypoints.length >= 2) {
-                const path = waypoints.map(wp => [wp.lng, wp.lat]);
-                waypointLine = new AMap.Polyline({
-                    path: path,
-                    strokeColor: '#ff5722',
-                    strokeWeight: 3,
-                    strokeOpacity: 0.75,
-                    strokeStyle: 'solid',
-                    lineJoin: 'round',
-                    lineCap: 'round',
-                    showDir: true,          // 方向箭头
-                    dirColor: '#fff',
-                    zIndex: 50
-                });
-                map.add(waypointLine);
-            }
-        }
-
-        // === 更新路径点列表面板 ===
-        function updateWaypointPanel() {
-            const list = document.getElementById('waypoint-list');
-            const btnClear = document.getElementById('btn-clear');
-
-            if (waypoints.length === 0) {
-                list.innerHTML = '<li id="waypoint-empty">右键地图添加路径点</li>';
-                btnClear.disabled = true;
-            } else {
-                btnClear.disabled = false;
-                list.innerHTML = waypoints.map((wp, i) => `
-                    <li onclick="focusWaypoint(${i})" title="点击定位到该路径点">
-                        <span class="wp-num">${wp.number}</span>
-                        <span class="wp-coords">${wp.lng.toFixed(6)}, ${wp.lat.toFixed(6)}</span>
-                        <span class="wp-delete" onclick="event.stopPropagation(); deleteWaypoint(${i})" title="删除此点">✕</span>
-                    </li>
-                `).join('');
-            }
-        }
-
-        // === 创建路径点标记（可拖动） ===
-        function createWaypointMarker(lng, lat, number) {
-            const marker = new AMap.Marker({
-                position: [lng, lat],
-                content: `<div class="waypoint-marker">${number}</div>`,
-                offset: new AMap.Pixel(-14, -14),
-                zIndex: 90,
-                title: `路径点 ${number}（可拖动）`,
-                draggable: true,
-                raiseOnDrag: true
-            });
-
-            // 拖动结束后更新坐标、连线和面板
-            marker.on('dragend', function () {
-                const pos = marker.getPosition();
-                // 找到对应的 waypoint 并更新
-                const wp = waypoints.find(w => w.marker === marker);
-                if (wp) {
-                    wp.lng = pos.getLng();
-                    wp.lat = pos.getLat();
-                    updatePolyline();
-                    updateWaypointPanel();
-                }
-            });
-
-            map.add(marker);
-            return marker;
-        }
-
-        // === 右键 → 添加路径点 ===
-        map.on('rightclick', function (e) {
-            const lng = e.lnglat.getLng();
-            const lat = e.lnglat.getLat();
-
-            waypointCounter++;
-            const marker = createWaypointMarker(lng, lat, waypointCounter);
-
-            waypoints.push({
-                number: waypointCounter,
-                lng: lng,
-                lat: lat,
-                marker: marker
-            });
-
-            updatePolyline();
-            updateWaypointPanel();
+    function focusWaypoint(index) {
+        const wp = waypoints[index]; if (!wp) return;
+        map.setCenter([wp.lng, wp.lat]); map.setZoom(18);
+    }
+    function reindexWaypoints() {
+        waypoints.forEach((wp, i) => {
+            wp.number = i + 1;
+            wp.marker.setContent(`<div class="waypoint-marker">${i+1}</div>`);
+            wp.marker.setTitle(`路径点 ${i+1}（可拖动）`);
         });
-
-        // === 左键 → 移动主标点 ===
-        map.on('click', function (e) {
-            const lng = e.lnglat.getLng();
-            const lat = e.lnglat.getLat();
-
-            map.remove(mainMarker);
-            mainMarker = new AMap.Marker({
-                position: [lng, lat],
-                title: '标点位置',
-                animation: 'AMAP_ANIMATION_DROP',
-                zIndex: 100
-            });
-            map.add(mainMarker);
-
-            updateMainPanel(lng, lat);
-        });
-
-        // === 聚焦到指定路径点 ===
-        function focusWaypoint(index) {
-            const wp = waypoints[index];
-            if (!wp) return;
-            map.setCenter([wp.lng, wp.lat]);
-            map.setZoom(18);
-        }
-
-        // === 重排路径点编号 ===
-        function reindexWaypoints() {
-            waypoints.forEach((wp, i) => {
-                wp.number = i + 1;
-                wp.marker.setContent(`<div class="waypoint-marker">${i + 1}</div>`);
-                wp.marker.setTitle(`路径点 ${i + 1}（可拖动）`);
-            });
-            waypointCounter = waypoints.length;
-        }
-
-        // === 删除单个路径点 ===
-        function deleteWaypoint(index) {
-            const wp = waypoints[index];
-            if (!wp) return;
-            map.remove(wp.marker);
-            waypoints.splice(index, 1);
-            reindexWaypoints();
-            updatePolyline();
-            updateWaypointPanel();
-        }
-
-        // === 一键清除所有路径点 ===
-        function clearAllWaypoints() {
-            waypoints.forEach(wp => map.remove(wp.marker));
-            waypoints = [];
-            waypointCounter = 0;
-            if (waypointLine) {
-                map.remove(waypointLine);
-                waypointLine = null;
-            }
-            updateWaypointPanel();
-        }
-
-        document.getElementById('btn-clear').addEventListener('click', clearAllWaypoints);
-
-        // === 屏蔽浏览器默认右键菜单 ===
-        document.getElementById('map').addEventListener('contextmenu', function (e) {
-            e.preventDefault();
-        });
-
-        // === GPS 蓝点（WebSocket 实时位置） ===
-        let gpsMarker = null;
-        let currentAzimuth = null;
-        const IOT_PORT = 8010;
-        const wsUrl = `ws://${location.hostname}:${IOT_PORT}/ws/frontend`;
-
-        // === WGS-84 → GCJ-02 坐标转换（高德地图使用 GCJ-02） ===
-        function wgs84ToGcj02(lng, lat) {
-            const PI = Math.PI;
-            const a = 6378245.0;
-            const ee = 0.00669342162296594323;
-
-            function outOfChina(lng, lat) {
-                return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
-            }
-
-            function transformLat(x, y) {
-                let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
-                ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
-                ret += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
-                ret += (160.0 * Math.sin(y / 12.0 * PI) + 320.0 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
-                return ret;
-            }
-
-            function transformLng(x, y) {
-                let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
-                ret += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
-                ret += (20.0 * Math.sin(x * PI) + 40.0 * Math.sin(x / 3.0 * PI)) * 2.0 / 3.0;
-                ret += (150.0 * Math.sin(x / 12.0 * PI) + 300.0 * Math.sin(x / 30.0 * PI)) * 2.0 / 3.0;
-                return ret;
-            }
-
-            if (outOfChina(lng, lat)) return [lng, lat];
-
-            let dLat = transformLat(lng - 105.0, lat - 35.0);
-            let dLng = transformLng(lng - 105.0, lat - 35.0);
-            let radLat = lat / 180.0 * PI;
-            let magic = Math.sin(radLat);
-            magic = 1 - ee * magic * magic;
-            let sqrtMagic = Math.sqrt(magic);
-            dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * PI);
-            dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * PI);
-
-            return [lng + dLng, lat + dLat];
-        }
-
-        function connectGPS() {
-            const ws = new WebSocket(wsUrl);
-            ws.onopen = () => console.log('[GPS] WebSocket connected');
-            ws.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    if (msg.type === 'gps' && msg.lat != null && msg.lon != null) {
-                        updateGPSMarker(msg.lon, msg.lat, msg);
-                    }
-                    // 提取 azimuth（来自 mag / imu 消息，后端已 enrich）
-                    if (msg.azimuth != null) {
-                        currentAzimuth = msg.azimuth;
-                        updateGPSArrow();
-                        // 罗盘
-                        document.getElementById('compass-needle').style.transform =
-                            `translate(-50%, -100%) rotate(${currentAzimuth}deg)`;
-                        document.getElementById('compass-val').textContent = currentAzimuth.toFixed(1) + '°';
-                    }
-                } catch (_) { /* non-JSON data, ignore */ }
-            };
-            ws.onclose = () => {
-                console.log('[GPS] WebSocket closed, reconnecting in 3s...');
-                document.getElementById('gps-dot').className = 'gps-offline';
-                document.getElementById('gps-label').textContent = '重连中...';
-                setTimeout(connectGPS, 3000);
-            };
-            ws.onerror = () => {
-                document.getElementById('gps-dot').className = 'gps-offline';
-                document.getElementById('gps-label').textContent = '无法连接 :8010';
-            };
-        }
-
-        function updateGPSMarker(lon, lat, gpsData) {
-            // WGS-84 → GCJ-02 转换（GPS 模块输出 WGS-84，高德地图需要 GCJ-02）
-            const [gcjLon, gcjLat] = wgs84ToGcj02(lon, lat);
-            const offsetLon = ((gcjLon - lon) * 111320 * Math.cos(lat * Math.PI / 180)).toFixed(1);
-            const offsetLat = ((gcjLat - lat) * 111320).toFixed(1);
-
-            document.getElementById('gps-dot').className = 'gps-online';
-            document.getElementById('gps-label').textContent =
-                `已定位 (${gpsData.fix >= 4 ? 'RTK' : gpsData.fix >= 1 ? 'GPS' : '定位中'})`;
-            document.getElementById('gps-coords').innerHTML =
-                `WGS84: ${lat.toFixed(6)}°, ${lon.toFixed(6)}°<br>` +
-                `GCJ02: ${gcjLat.toFixed(6)}°, ${gcjLon.toFixed(6)}°`;
-
-            const az = currentAzimuth != null ? currentAzimuth : 0;
-            const arrowVis = currentAzimuth != null ? '' : 'display:none';
-            const html = '<div style="position:relative">' +
-                `<div id="gps-arrow-el" style="position:absolute;left:50%;bottom:100%;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:14px solid #fff;transform:translateX(-50%) rotate(${az}deg);transform-origin:center bottom;${arrowVis}"></div>` +
-                '<div class="gps-marker"></div></div>';
-
-            if (!gpsMarker) {
-                gpsMarker = new AMap.Marker({
-                    position: [gcjLon, gcjLat],
-                    content: html,
-                    offset: new AMap.Pixel(-9, -9),
-                    zIndex: 95,
-                    title: 'GPS 实时位置 (已转 GCJ-02)'
-                });
-                map.add(gpsMarker);
-            } else {
-                gpsMarker.setPosition([gcjLon, gcjLat]);
-                gpsMarker.setContent(html);
-            }
-        }
-
-        function updateGPSArrow() {
-            const arrow = document.getElementById('gps-arrow-el');
-            if (!arrow) return;
-            if (currentAzimuth != null) {
-                arrow.style.display = 'block';
-                arrow.style.transform = `translateX(-50%) rotate(${currentAzimuth}deg)`;
-            } else {
-                arrow.style.display = 'none';
-            }
-        }
-
-        connectGPS();
-
-        // === 初始显示 ===
-        updateMainPanel(INIT_LNG, INIT_LAT);
+        waypointCounter = waypoints.length;
+    }
+    function deleteWaypoint(index) {
+        const wp = waypoints[index]; if (!wp) return;
+        map.remove(wp.marker); waypoints.splice(index, 1);
+        reindexWaypoints(); updatePolyline(); updateWaypointPanel();
+    }
+    function clearAllWaypoints() {
+        waypoints.forEach(wp => map.remove(wp.marker));
+        waypoints = []; waypointCounter = 0;
+        if (waypointLine) { map.remove(waypointLine); waypointLine = null; }
         updateWaypointPanel();
+    }
+    document.getElementById('btn-clear').addEventListener('click', clearAllWaypoints);
+    document.getElementById('map').addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // ── GPS ──
+    let gpsMarker = null, currentAzimuth = null;
+    const IOT_PORT = 8010;
+    const wsUrl = `ws://${location.hostname}:${IOT_PORT}/ws/frontend`;
+
+    function wgs84ToGcj02(lng, lat) {
+        const PI = Math.PI, a = 6378245.0, ee = 0.00669342162296594323;
+        function outOfChina(l, t) { return l < 72.004 || l > 137.8347 || t < 0.8293 || t > 55.8271; }
+        function transformLat(x, y) {
+            let r = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x));
+            r += (20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;
+            r += (20*Math.sin(y*PI)+40*Math.sin(y/3*PI))*2/3;
+            r += (160*Math.sin(y/12*PI)+320*Math.sin(y*PI/30))*2/3; return r;
+        }
+        function transformLng(x, y) {
+            let r = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x));
+            r += (20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;
+            r += (20*Math.sin(x*PI)+40*Math.sin(x/3*PI))*2/3;
+            r += (150*Math.sin(x/12*PI)+300*Math.sin(x/30*PI))*2/3; return r;
+        }
+        if (outOfChina(lng, lat)) return [lng, lat];
+        let dLat = transformLat(lng-105, lat-35), dLng = transformLng(lng-105, lat-35);
+        let radLat = lat/180*PI, magic = Math.sin(radLat);
+        magic = 1 - ee*magic*magic;
+        let sqrtMagic = Math.sqrt(magic);
+        dLat = (dLat*180)/((a*(1-ee))/(magic*sqrtMagic)*PI);
+        dLng = (dLng*180)/(a/sqrtMagic*Math.cos(radLat)*PI);
+        return [lng+dLng, lat+dLat];
+    }
+
+    function connectGPS() {
+        const ws = new WebSocket(wsUrl);
+        ws.onopen = () => console.log('[GPS] WS connected');
+        ws.onmessage = (e) => {
+            try {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'gps' && msg.lat != null && msg.lon != null) {
+                    updateGPSMarker(msg.lon, msg.lat, msg);
+                }
+                if (msg.azimuth != null) {
+                    currentAzimuth = msg.azimuth;
+                    updateGPSArrow();
+                    document.getElementById('compass-needle').style.transform = `translate(-50%, -100%) rotate(${currentAzimuth}deg)`;
+                    document.getElementById('compass-val').textContent = currentAzimuth.toFixed(1) + '°';
+                }
+            } catch(_) {}
+        };
+        ws.onclose = () => {
+            document.getElementById('gps-dot').className = 'gps-offline';
+            document.getElementById('gps-label').textContent = '重连中...';
+            setTimeout(connectGPS, 3000);
+        };
+        ws.onerror = () => {
+            document.getElementById('gps-dot').className = 'gps-offline';
+            document.getElementById('gps-label').textContent = '无法连接';
+        };
+    }
+
+    function updateGPSMarker(lon, lat, gpsData) {
+        const [gcjLon, gcjLat] = wgs84ToGcj02(lon, lat);
+        document.getElementById('gps-dot').className = 'gps-online';
+        document.getElementById('gps-label').textContent = `已定位 (${gpsData.fix >= 4 ? 'RTK' : gpsData.fix >= 1 ? 'GPS' : '定位中'})`;
+        document.getElementById('gps-coords').innerHTML = `WGS84: ${lat.toFixed(6)}°, ${lon.toFixed(6)}°<br>GCJ02: ${gcjLat.toFixed(6)}°, ${gcjLon.toFixed(6)}°`;
+
+        const az = currentAzimuth != null ? currentAzimuth : 0;
+        const arrowVis = currentAzimuth != null ? '' : 'display:none';
+        const html = `<div style="position:relative"><div id="gps-arrow-el" style="position:absolute;left:50%;bottom:100%;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:14px solid #fff;transform:translateX(-50%) rotate(${az}deg);transform-origin:center bottom;${arrowVis}"></div><div class="gps-marker"></div></div>`;
+
+        if (!gpsMarker) {
+            gpsMarker = new AMap.Marker({ position: [gcjLon, gcjLat], content: html, offset: new AMap.Pixel(-9, -9), zIndex: 95, title: 'GPS 实时位置' });
+            map.add(gpsMarker);
+        } else {
+            gpsMarker.setPosition([gcjLon, gcjLat]); gpsMarker.setContent(html);
+        }
+    }
+    function updateGPSArrow() {
+        const arrow = document.getElementById('gps-arrow-el');
+        if (!arrow) return;
+        if (currentAzimuth != null) { arrow.style.display = 'block'; arrow.style.transform = `translateX(-50%) rotate(${currentAzimuth}deg)`; }
+        else { arrow.style.display = 'none'; }
+    }
+
+    connectGPS();
+    updateMainPanel(INIT_LNG, INIT_LAT);
+    updateWaypointPanel();
     </script>
 </body>
 </html>
