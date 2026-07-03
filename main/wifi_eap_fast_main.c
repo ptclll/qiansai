@@ -168,54 +168,70 @@ static int ws_send(const char *data, size_t len)
 static void ws_rx_task(void *pvParameters)
 {
     uint8_t buf[UART_RX_BUF_SIZE];
+    TickType_t last_rx_tick = 0;
 
     /* wait for WiFi */
     while (!(xEventGroupGetBits(wifi_event_group) & CONNECTED_BIT)) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
+    last_rx_tick = xTaskGetTickCount();
 
     while (1) {
+        /* ── (Re)connect if offline ── */
         if (!ws_transport || !ws_connected) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            continue;
+            ws_start();   /* retry every loop — safe: returns early if already connected */
+            if (!ws_transport || !ws_connected) {
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                continue;
+            }
+            last_rx_tick = xTaskGetTickCount();
         }
 
-        /* Poll first — detect disconnection faster than blocking read */
+        /* ── Keepalive: no data for 60 s → force reconnect ── */
+        if ((xTaskGetTickCount() - last_rx_tick) > pdMS_TO_TICKS(60000)) {
+            ESP_LOGW(TAG, "WS idle 60 s, forcing reconnect…");
+            ws_connected = false;
+            ws_stop();
+            continue;   /* will retry ws_start at top of loop */
+        }
+
+        /* ── Poll for incoming data ── */
         int poll_ret = esp_transport_poll_read(ws_transport, 500);
         if (poll_ret < 0) {
             ESP_LOGW(TAG, "WS poll error %d, reconnecting…", poll_ret);
             ws_connected = false;
             ws_stop();
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            ws_start();
             continue;
         }
         if (poll_ret == 0) {
-            /* No data within 500 ms — loop and re-check ws_connected */
+            /* No data within 500 ms — loop re-checks keepalive */
             continue;
         }
 
-        /* Data ready — read it */
-        int len = esp_transport_read(ws_transport, (char *)buf,
-                                     sizeof(buf) - 1, 100);
-        if (len > 0) {
-            buf[len] = '\0';
+        /* ── Drain all queued frames (rapid‑fire CMDs won't pile up) ── */
+        while (1) {
+            int len = esp_transport_read(ws_transport, (char *)buf,
+                                         sizeof(buf) - 1, 50);
+            if (len > 0) {
+                last_rx_tick = xTaskGetTickCount();
+                buf[len] = '\0';
 
-            /* ── CMD: prefix → log to esp_log, skip UART1 ── */
-            if (len >= 4 && memcmp(buf, "CMD:", 4) == 0) {
-                ESP_LOGI(TAG, "CMD: %s", (char *)buf + 4);
+                /* CMD: prefix → log to esp_log, skip UART1 */
+                if (len >= 4 && memcmp(buf, "CMD:", 4) == 0) {
+                    ESP_LOGI(TAG, "CMD: %s", (char *)buf + 4);
+                } else {
+                    uart_write_bytes(UART1_PORT, (const char *)buf, len);
+                    ESP_LOGI(TAG, "WS→UART1 %d B", len);
+                }
+            } else if (len < 0) {
+                ESP_LOGW(TAG, "WS read error %d, reconnecting…", len);
+                ws_connected = false;
+                ws_stop();
+                break;   /* exit drain loop, reconnect at top */
             } else {
-                uart_write_bytes(UART1_PORT, (const char *)buf, len);
-                ESP_LOGI(TAG, "WS→UART1 %d B", len);
+                break;   /* len == 0: no more data, back to poll */
             }
-        } else if (len < 0) {
-            ESP_LOGW(TAG, "WS read error %d, reconnecting…", len);
-            ws_connected = false;
-            ws_stop();
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            ws_start();
         }
-        /* len == 0: spurious, ignore */
     }
 }
 
