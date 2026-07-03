@@ -118,13 +118,15 @@ def current_image_info() -> dict:
 @app.get("/")
 async def root():
     """交互地图主页"""
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"),
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/imagic")
 async def imagic_page():
     """图片显示页面"""
-    return FileResponse(os.path.join(STATIC_DIR, "imagic.html"))
+    return FileResponse(os.path.join(STATIC_DIR, "imagic.html"),
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 # ── APIs ──────────────────────────────────────────────────────
