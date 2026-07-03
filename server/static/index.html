@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-S3 UART 监视器</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>ESP32-S3 控制台</title>
 <style>
   :root {
     --bg: #f0f2f5;
@@ -13,8 +13,9 @@
     --blue: #2563eb;
     --green: #16a34a;
     --red: #dc2626;
+    --orange: #e67e22;
     --border: #e5e7eb;
-    --shadow: 0 4px 24px rgba(0,0,0,0.06);
+    --shadow: 0 2px 12px rgba(0,0,0,0.05);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -22,172 +23,287 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    padding: 16px;
+    padding-top: 56px; /* space for sticky bar */
   }
-  .container { max-width: 800px; margin: 0 auto; }
 
-  /* ── Status bar ── */
-  .status-bar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; border-radius: 12px;
-    background: var(--card); box-shadow: var(--shadow);
-    margin-bottom: 12px; font-size: 14px;
+  /* ═══════════════════════════════════════════
+     Sticky status bar
+     ═══════════════════════════════════════════ */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; gap: 10px;
+    height: 48px; padding: 0 16px;
+    background: #1e293b; color: #f1f5f9; font-size: 14px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.18);
+    user-select: none;
   }
-  .dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    flex-shrink: 0;
+  .topbar .brand { font-weight: 600; letter-spacing: 0.5px; margin-right: 4px; }
+  .topbar .dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
   }
-  .dot.off  { background: var(--red); }
-  .dot.on   { background: var(--green); }
+  .topbar .dot.on  { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+  .topbar .dot.off { background: #f87171; }
+  .topbar .spacer { flex: 1; }
+  .topbar .clock { font-variant-numeric: tabular-nums; opacity: 0.8; font-size: 13px; }
 
-  /* ── Data display ── */
+  /* ═══════════════════════════════════════════
+     Container & cards
+     ═══════════════════════════════════════════ */
+  .container { max-width: 780px; margin: 0 auto; padding: 12px 12px 24px; }
+
   .card {
     background: var(--card); border-radius: 12px;
-    box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px;
+    box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px;
   }
-  .card h2 { font-size: 16px; margin-bottom: 8px; color: var(--muted); }
+  .card h2 {
+    font-size: 15px; font-weight: 600; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+    color: #374151;
+  }
+  .card h2 .icon { font-size: 17px; }
+
+  /* ── Badge tag ── */
+  .badge {
+    font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500;
+  }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-blue   { background: #eff6ff; color: #1e40af; }
+  .badge-green  { background: #dcfce7; color: #166534; }
+  .badge-red    { background: #fee2e2; color: #991b1b; }
+
+  /* ── Data grid (GPS / IMU) ── */
+  .data-grid { display: grid; gap: 8px 12px; font-size: 13px; }
+  .data-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .data-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .data-grid .kv b { color: var(--muted); font-weight: 500; }
+  .data-grid .kv span { font-variant-numeric: tabular-nums; }
+
+  /* ── UART log ── */
   #uart-log {
-    width: 100%; min-height: 260px; max-height: 50vh;
+    width: 100%; min-height: 200px; max-height: 40vh;
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-    font-size: 14px; line-height: 1.5;
+    font-size: 13px; line-height: 1.5;
     border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px; resize: vertical;
-    background: #fafbfc; color: #1f2937;
+    padding: 10px; background: #f8fafc; color: #1f2937;
     overflow-y: auto; white-space: pre-wrap; word-break: break-all;
   }
+  .ts { color: var(--muted); font-size: 11px; }
 
-  /* ── Send area ── */
-  .send-row {
-    display: flex; gap: 8px;
-  }
-  #send-input {
-    flex: 1; padding: 10px 12px;
-    font-size: 15px; border: 1px solid var(--border);
-    border-radius: 8px; outline: none;
+  /* ── Buttons & inputs ── */
+  .input-row { display: flex; gap: 8px; }
+  .input-row input {
+    flex: 1; padding: 9px 12px; font-size: 14px;
+    border: 1px solid var(--border); border-radius: 8px; outline: none;
     transition: border-color 0.15s;
   }
-  #send-input:focus { border-color: var(--blue); }
+  .input-row input:focus { border-color: var(--blue); }
+
   .btn {
-    padding: 10px 20px; border: none; border-radius: 8px;
-    font-size: 15px; cursor: pointer; font-weight: 500;
-    transition: background 0.15s, transform 0.1s;
-    color: #fff;
+    padding: 9px 18px; border: none; border-radius: 8px;
+    font-size: 14px; cursor: pointer; font-weight: 500;
+    transition: background 0.15s, transform 0.1s; color: #fff;
+    white-space: nowrap;
   }
-  .btn:active { transform: scale(0.97); }
-  .btn-send { background: var(--blue); }
-  .btn-send:hover { background: #1d4ed8; }
-  .btn-clear { background: var(--muted); }
-  .btn-clear:hover { background: #4b5563; }
+  .btn:active { transform: scale(0.96); }
+  .btn-blue  { background: var(--blue); }
+  .btn-blue:hover  { background: #1d4ed8; }
+  .btn-gray  { background: var(--muted); }
+  .btn-gray:hover  { background: #4b5563; }
+  .btn-orange { background: var(--orange); }
+  .btn-orange:hover { background: #d35400; }
 
-  .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .preset {
-    padding: 6px 14px; border: 1px solid var(--border);
-    border-radius: 20px; background: #fff; font-size: 13px;
-    cursor: pointer; transition: all 0.15s;
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    padding: 5px 13px; border: 1px solid var(--border);
+    border-radius: 20px; background: #fff; font-size: 12px;
+    cursor: pointer; transition: all 0.15s; color: #374151;
   }
-  .preset:hover { background: #eff6ff; border-color: var(--blue); color: var(--blue); }
+  .chip:hover { background: #eff6ff; border-color: var(--blue); color: var(--blue); }
 
-  /* ── Timestamp ── */
-  .ts { color: var(--muted); font-size: 11px; }
+  /* ═══════════════════════════════════════════
+     D‑pad control
+     ═══════════════════════════════════════════ */
+  .dpad {
+    display: grid; grid-template-columns: 80px 80px 80px;
+    grid-template-rows: 80px 80px 80px;
+    gap: 6px; justify-content: center;
+    margin: 6px 0 14px;
+  }
+  .dpad .empty { visibility: hidden; }
+
+  .dbtn {
+    border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: all 0.12s; user-select: none;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 2px;
+  }
+  .dbtn:active { transform: scale(0.93); }
+
+  .dbtn-up    { background: #3b82f6; color: #fff; grid-column: 2; grid-row: 1; }
+  .dbtn-left  { background: #f59e0b; color: #fff; grid-column: 1; grid-row: 2; }
+  .dbtn-stop  { background: #e2e8f0; color: #64748b; grid-column: 2; grid-row: 2;
+                 font-size: 13px; }
+  .dbtn-right { background: #f59e0b; color: #fff; grid-column: 3; grid-row: 2; }
+  .dbtn-down  { background: #3b82f6; color: #fff; grid-column: 2; grid-row: 3; }
+
+  .dbtn .arr { font-size: 26px; line-height: 1; }
+  .dbtn .lbl { font-size: 11px; opacity: 0.85; }
+
+  /* ── Custom ABCD buttons ── */
+  .custom-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .cbtn {
+    flex: 1; min-width: 60px; max-width: 100px; padding: 14px 0;
+    border: none; border-radius: 12px; font-size: 20px; font-weight: 700;
+    cursor: pointer; transition: all 0.12s; user-select: none;
+    color: #fff; letter-spacing: 1px;
+  }
+  .cbtn:active { transform: scale(0.94); }
+  .cbtn-a { background: #ef4444; }
+  .cbtn-b { background: #8b5cf6; }
+  .cbtn-c { background: #10b981; }
+  .cbtn-d { background: #f59e0b; }
+
+  /* ═══════════════════════════════════════════
+     Responsive
+     ═══════════════════════════════════════════ */
+  @media (max-width: 500px) {
+    .container { padding: 8px; }
+    .dpad { grid-template-columns: 64px 64px 64px; grid-template-rows: 64px 64px 64px; }
+    .dbtn .arr { font-size: 22px; }
+    .data-grid.cols-2, .data-grid.cols-3 { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
+
+<!-- ═══════════ Sticky top bar ═══════════ -->
+<div class="topbar">
+  <span class="brand">ESP32-S3</span>
+  <span class="dot" id="esp32-dot"></span>
+  <span id="esp32-label">—</span>
+  <span class="spacer"></span>
+  <span class="clock" id="clock"></span>
+</div>
+
+<!-- ═══════════ Content ═══════════ -->
 <div class="container">
 
-  <!-- Status bar -->
-  <div class="status-bar">
-    <span>ESP32:</span>
-    <span class="dot" id="esp32-dot"></span>
-    <span id="esp32-label">—</span>
-    <span style="margin-left:auto;font-size:13px;color:var(--muted);" id="clock"></span>
+  <!-- 🎮 Control panel -->
+  <div class="card">
+    <h2><span class="icon">🎮</span> 控制</h2>
+
+    <!-- D-pad -->
+    <div class="dpad">
+      <button class="dbtn dbtn-up" onclick="sendTurn('forward')">
+        <span class="arr">▲</span><span class="lbl">前进</span>
+      </button>
+      <button class="dbtn dbtn-left" onclick="sendTurn('left')">
+        <span class="arr">◀</span><span class="lbl">左转</span>
+      </button>
+      <button class="dbtn dbtn-stop" onclick="sendTurn('stop')">
+        <span class="arr" style="font-size:18px;">■</span><span class="lbl">停止</span>
+      </button>
+      <button class="dbtn dbtn-right" onclick="sendTurn('right')">
+        <span class="arr">▶</span><span class="lbl">右转</span>
+      </button>
+      <button class="dbtn dbtn-down" onclick="sendTurn('backward')">
+        <span class="arr">▼</span><span class="lbl">后退</span>
+      </button>
+    </div>
+
+    <!-- Custom keys A B C D -->
+    <div class="custom-row">
+      <button class="cbtn cbtn-a" onclick="sendCustom('A')">A</button>
+      <button class="cbtn cbtn-b" onclick="sendCustom('B')">B</button>
+      <button class="cbtn cbtn-c" onclick="sendCustom('C')">C</button>
+      <button class="cbtn cbtn-d" onclick="sendCustom('D')">D</button>
+    </div>
   </div>
 
-  <!-- UART data -->
+  <!-- 📟 UART log -->
   <div class="card">
-    <h2>📟 UART1 实时数据</h2>
+    <h2><span class="icon">📟</span> UART1 实时数据</h2>
     <div id="uart-log"></div>
-    <div style="margin-top:4px;">
-      <button class="btn btn-clear" onclick="clearLog()">清空</button>
-      <label style="margin-left:12px;font-size:13px;color:var(--muted);">
+    <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+      <button class="btn btn-gray" onclick="clearLog()" style="font-size:12px;padding:6px 14px;">清空</button>
+      <label style="font-size:12px;color:var(--muted);cursor:pointer;">
         <input type="checkbox" id="auto-scroll" checked> 自动滚动
       </label>
     </div>
   </div>
 
-  <!-- GPS parsed data -->
+  <!-- 🛰️ GPS parsed data -->
   <div class="card" id="gps-card" style="display:none;">
-    <h2>🛰️ GPS 解析数据 <span id="gps-fix-badge" style="font-size:12px;padding:2px 8px;border-radius:10px;margin-left:8px;"></span></h2>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:14px;">
-      <div><b>纬度:</b> <span id="gps-lat">—</span></div>
-      <div><b>经度:</b> <span id="gps-lon">—</span></div>
-      <div><b>高度:</b> <span id="gps-alt">—</span> m</div>
-      <div><b>定位类型:</b> <span id="gps-fix">—</span></div>
-      <div><b>使用卫星:</b> <span id="gps-sat-used">—</span></div>
-      <div><b>可见卫星:</b> <span id="gps-sat-view">—</span> (GPS:<span id="gps-gps-sat">—</span> BD:<span id="gps-bd-sat">—</span>)</div>
-      <div><b>信号最强:</b> <span id="gps-snr-max">—</span> dBHz</div>
-      <div><b>信号平均:</b> <span id="gps-snr-avg">—</span> dBHz</div>
-      <div><b>PDOP:</b> <span id="gps-pdop">—</span></div>
-      <div><b>HDOP:</b> <span id="gps-hdop">—</span></div>
-      <div><b>VDOP:</b> <span id="gps-vdop">—</span></div>
-      <div><b>天线状态:</b> <span id="gps-ant">—</span></div>
-      <div><b>UTC时间:</b> <span id="gps-time">—</span></div>
+    <h2><span class="icon">🛰️</span> GPS 解析数据 <span id="gps-fix-badge" class="badge"></span></h2>
+    <div class="data-grid cols-2">
+      <div class="kv"><b>纬度:</b> <span id="gps-lat">—</span></div>
+      <div class="kv"><b>经度:</b> <span id="gps-lon">—</span></div>
+      <div class="kv"><b>高度:</b> <span id="gps-alt">—</span> m</div>
+      <div class="kv"><b>定位类型:</b> <span id="gps-fix">—</span></div>
+      <div class="kv"><b>使用卫星:</b> <span id="gps-sat-used">—</span></div>
+      <div class="kv"><b>可见卫星:</b> <span id="gps-sat-view">—</span> (GPS:<span id="gps-gps-sat">—</span> BD:<span id="gps-bd-sat">—</span>)</div>
+      <div class="kv"><b>信号最强:</b> <span id="gps-snr-max">—</span> dBHz</div>
+      <div class="kv"><b>信号平均:</b> <span id="gps-snr-avg">—</span> dBHz</div>
+      <div class="kv"><b>PDOP:</b> <span id="gps-pdop">—</span></div>
+      <div class="kv"><b>HDOP:</b> <span id="gps-hdop">—</span></div>
+      <div class="kv"><b>VDOP:</b> <span id="gps-vdop">—</span></div>
+      <div class="kv"><b>天线状态:</b> <span id="gps-ant">—</span></div>
+      <div class="kv"><b>UTC时间:</b> <span id="gps-time">—</span></div>
     </div>
   </div>
 
-  <!-- IMU (MPU9250) data -->
+  <!-- 📐 IMU / Magnetometer data -->
   <div class="card" id="imu-card" style="display:none;">
-    <h2>📐 MPU9250 IMU 数据 <span id="imu-rate-badge" style="font-size:12px;padding:2px 8px;border-radius:10px;margin-left:8px;background:#eff6ff;color:#1e40af;">10Hz</span></h2>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; font-size:14px;">
-      <div><b>加速度 X:</b> <span id="imu-ax">—</span> m/s²</div>
-      <div><b>加速度 Y:</b> <span id="imu-ay">—</span> m/s²</div>
-      <div><b>加速度 Z:</b> <span id="imu-az">—</span> m/s²</div>
-      <div><b>陀螺仪 X:</b> <span id="imu-gx">—</span> rad/s</div>
-      <div><b>陀螺仪 Y:</b> <span id="imu-gy">—</span> rad/s</div>
-      <div><b>陀螺仪 Z:</b> <span id="imu-gz">—</span> rad/s</div>
-      <div><b>磁力计 X:</b> <span id="imu-mx">—</span> µT</div>
-      <div><b>磁力计 Y:</b> <span id="imu-my">—</span> µT</div>
-      <div><b>磁力计 Z:</b> <span id="imu-mz">—</span> µT</div>
-      <div><b>X轴方位角:</b> <span id="imu-azimuth">—</span>° <span style="font-size:12px;color:var(--muted);">(atan2(y,x))</span></div>
-      <div><b>温度:</b> <span id="imu-temp">—</span> °C</div>
-      <div><b>磁力计状态:</b> <span id="imu-mag-ok">—</span></div>
+    <h2><span class="icon">📐</span> <span id="imu-title">传感器数据</span> <span id="imu-rate-badge" class="badge badge-blue">100Hz</span></h2>
+    <div class="data-grid cols-3">
+      <div class="kv"><b>加速度 X:</b> <span id="imu-ax">—</span> m/s²</div>
+      <div class="kv"><b>加速度 Y:</b> <span id="imu-ay">—</span> m/s²</div>
+      <div class="kv"><b>加速度 Z:</b> <span id="imu-az">—</span> m/s²</div>
+      <div class="kv"><b>陀螺仪 X:</b> <span id="imu-gx">—</span> rad/s</div>
+      <div class="kv"><b>陀螺仪 Y:</b> <span id="imu-gy">—</span> rad/s</div>
+      <div class="kv"><b>陀螺仪 Z:</b> <span id="imu-gz">—</span> rad/s</div>
+      <div class="kv"><b>磁力计 X:</b> <span id="imu-mx">—</span> µT</div>
+      <div class="kv"><b>磁力计 Y:</b> <span id="imu-my">—</span> µT</div>
+      <div class="kv"><b>磁力计 Z:</b> <span id="imu-mz">—</span> µT</div>
+      <div class="kv"><b>方位角:</b> <span id="imu-azimuth">—</span>°</div>
+      <div class="kv"><b>温度:</b> <span id="imu-temp">—</span> °C</div>
+      <div class="kv"><b>磁力计状态:</b> <span id="imu-mag-ok">—</span></div>
     </div>
   </div>
 
-  <!-- ESP32 Command -->
+  <!-- 📡 ESP32 command -->
   <div class="card">
-    <h2>📡 ESP32 指令记录 <span style="font-size:12px;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e;margin-left:8px;">esp_log</span></h2>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">
-      通过 WebSocket 发送指令到 ESP32，ESP32 解析后通过 esp_log 打印到 UART0 控制台
-    </p>
-    <div class="send-row">
-      <input id="cmd-input" type="text" placeholder="输入 ESP32 指令…" autocomplete="off"
+    <h2><span class="icon">📡</span> ESP32 指令 <span class="badge badge-yellow">esp_log</span></h2>
+    <div class="input-row">
+      <input id="cmd-input" type="text" placeholder="输入指令…" autocomplete="off"
              onkeydown="if(event.key==='Enter')sendCmd()">
-      <button class="btn btn-send" onclick="sendCmd()" style="background:#e67e22;">发送指令</button>
+      <button class="btn btn-orange" onclick="sendCmd()">发送</button>
     </div>
-    <div class="preset-row">
-      <button class="preset" onclick="sendCmdPreset('STATUS')">STATUS</button>
-      <button class="preset" onclick="sendCmdPreset('HELLO')">HELLO</button>
-      <button class="preset" onclick="sendCmdPreset('VERSION')">VERSION</button>
-      <button class="preset" onclick="sendCmdPreset('PING')">PING</button>
+    <div class="chip-row">
+      <button class="chip" onclick="sendCmdPreset('STATUS')">STATUS</button>
+      <button class="chip" onclick="sendCmdPreset('HELLO')">HELLO</button>
+      <button class="chip" onclick="sendCmdPreset('VERSION')">VERSION</button>
+      <button class="chip" onclick="sendCmdPreset('PING')">PING</button>
     </div>
   </div>
 
-  <!-- Send -->
+  <!-- 📤 Send to UART1 -->
   <div class="card">
-    <h2>📤 发送到 UART1</h2>
-    <div class="send-row">
-      <input id="send-input" type="text" placeholder="输入要发送的数据…" autocomplete="off"
+    <h2><span class="icon">📤</span> 发送到 UART1</h2>
+    <div class="input-row">
+      <input id="send-input" type="text" placeholder="输入数据…" autocomplete="off"
              onkeydown="if(event.key==='Enter')sendData()">
-      <button class="btn btn-send" onclick="sendData()">发送</button>
+      <button class="btn btn-blue" onclick="sendData()">发送</button>
     </div>
-    <div class="preset-row">
-      <button class="preset" onclick="sendPreset('AT\r\n')">AT</button>
-      <button class="preset" onclick="sendPreset('AT+GMR\r\n')">AT+GMR</button>
-      <button class="preset" onclick="sendPreset('AT+CWLAP\r\n')">AT+CWLAP</button>
-      <button class="preset" onclick="sendPreset('1')">1</button>
-      <button class="preset" onclick="sendPreset('0')">0</button>
-      <button class="preset" onclick="sendPreset('ON')">ON</button>
-      <button class="preset" onclick="sendPreset('OFF')">OFF</button>
+    <div class="chip-row">
+      <button class="chip" onclick="sendPreset('AT\r\n')">AT</button>
+      <button class="chip" onclick="sendPreset('AT+GMR\r\n')">AT+GMR</button>
+      <button class="chip" onclick="sendPreset('AT+CWLAP\r\n')">AT+CWLAP</button>
+      <button class="chip" onclick="sendPreset('1')">1</button>
+      <button class="chip" onclick="sendPreset('0')">0</button>
+      <button class="chip" onclick="sendPreset('ON')">ON</button>
+      <button class="chip" onclick="sendPreset('OFF')">OFF</button>
     </div>
   </div>
 
@@ -205,158 +321,122 @@ const autoScrollCb = document.getElementById('auto-scroll');
 let esp32Online = false;
 
 // ── Clock ──
-setInterval(() => {
-  const now = new Date();
-  clockEl.textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
-}, 1000);
+(function tick() {
+  clockEl.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  setTimeout(tick, 1000);
+})();
 
 // ── WebSocket ──
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-// Connect using the same host that served the page
 const wsUrl = `${protocol}//${location.host}/ws/frontend`;
 let ws = null;
 
 function connect() {
   ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    console.log('Frontend WS connected');
-  };
-  ws.onmessage = (e) => {
-    appendLog(e.data);
-  };
-  ws.onclose = () => {
-    console.log('Frontend WS closed, reconnecting in 2s…');
-    setTimeout(connect, 2000);
-  };
-  ws.onerror = (err) => {
-    console.error('Frontend WS error', err);
-  };
+  ws.onopen  = () => console.log('Frontend WS connected');
+  ws.onclose = () => { console.log('WS closed, reconnecting in 2s…'); setTimeout(connect, 2000); };
+  ws.onerror = () => {};
+  ws.onmessage = (e) => appendLog(e.data);
 }
 
-// ── ESP32 status polling (lightweight, every 3s) ──
+// ── ESP32 health polling ──
 async function pollStatus() {
   try {
     const r = await fetch('/health');
     const j = await r.json();
-    const wasOnline = esp32Online;
     esp32Online = j.esp32_connected;
     dotEl.className = 'dot ' + (esp32Online ? 'on' : 'off');
-    labelEl.textContent = esp32Online
-      ? '在线'
-      : '离线';
+    labelEl.textContent = esp32Online ? '在线' : '离线';
   } catch (e) {
     dotEl.className = 'dot off';
     labelEl.textContent = '—';
   }
 }
-
 setInterval(pollStatus, 3000);
 pollStatus();
 
-// ── Log helpers ──
-function appendLog(text) {
-  /* Check if it's a JSON GPS message */
-  if (text.startsWith('{') && text.includes('"type":"gps"')) {
-    try {
-      const gps = JSON.parse(text);
-      updateGpsCard(gps);
-      return; /* Don't add JSON to raw log */
-    } catch(e) { /* fall through to raw log */ }
+// ── Generic send helper ──
+function wsSend(text, logPrefix) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(text);
+    appendLog(logPrefix + ' ' + text.replace(/^CMD:/,''));
+    return true;
   }
-
-  /* Check if it's a JSON IMU message */
-  if (text.startsWith('{') && text.includes('"type":"imu"')) {
-    try {
-      const imu = JSON.parse(text);
-      updateImuCard(imu);
-      return; /* Don't add JSON to raw log */
-    } catch(e) { /* fall through to raw log */ }
-  }
-
-  /* Check if it's a JSON mag message */
-  if (text.startsWith('{') && text.includes('"type":"mag"')) {
-    try {
-      const mag = JSON.parse(text);
-      updateMagCard(mag);
-      return; /* Don't add JSON to raw log */
-    } catch(e) { /* fall through to raw log */ }
-  }
-
-  const now = new Date();
-  const ts = now.toLocaleTimeString('zh-CN', { hour12: false });
-  const line = `<span class="ts">[${ts}]</span> ${escHtml(text)}`;
-  logEl.innerHTML += line + '\n';
-  if (autoScrollCb.checked) {
-    logEl.scrollTop = logEl.scrollHeight;
-  }
+  appendLog('[SYS] WebSocket 未连接');
+  return false;
 }
 
-function clearLog() {
-  logEl.innerHTML = '';
-}
-
+// ── Log ──
 function escHtml(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
 }
 
-// ── Send ──
+function appendLog(text) {
+  /* Route JSON to data cards */
+  if (text.startsWith('{') && text.includes('"type":"gps"')) {
+    try { updateGpsCard(JSON.parse(text)); return; } catch(e) {}
+  }
+  if (text.startsWith('{') && text.includes('"type":"imu"')) {
+    try { updateImuCard(JSON.parse(text)); return; } catch(e) {}
+  }
+  if (text.startsWith('{') && text.includes('"type":"mag"')) {
+    try { updateMagCard(JSON.parse(text)); return; } catch(e) {}
+  }
+
+  const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  logEl.innerHTML += `<span class="ts">[${ts}]</span> ${escHtml(text)}\n`;
+  if (autoScrollCb.checked) logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() { logEl.innerHTML = ''; }
+
+// ── UART1 send ──
 function sendData() {
   const text = inputEl.value;
   if (!text) return;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(text);
-    appendLog('→ ' + text);
-    inputEl.value = '';
-    inputEl.focus();
-  } else {
-    appendLog('[SYS] WebSocket 未连接');
-  }
+  wsSend(text, '→');
+  inputEl.value = '';
+  inputEl.focus();
 }
 
 function sendPreset(text) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(text);
-    appendLog('→ ' + text.trim());
-  } else {
-    appendLog('[SYS] WebSocket 未连接');
-  }
+  wsSend(text, '→');
 }
 
-// ── ESP32 Command ──
+// ── ESP32 CMD ──
 function sendCmd() {
-  const inputEl = document.getElementById('cmd-input');
-  const text = inputEl.value.trim();
+  const el = document.getElementById('cmd-input');
+  const text = el.value.trim();
   if (!text) return;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send('CMD:' + text);
-    appendLog('📡 [ESP32-CMD] ' + text);
-    inputEl.value = '';
-    inputEl.focus();
-  } else {
-    appendLog('[SYS] WebSocket 未连接');
-  }
+  wsSend('CMD:' + text, '📡');
+  el.value = '';
+  el.focus();
 }
 
 function sendCmdPreset(text) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send('CMD:' + text);
-    appendLog('📡 [ESP32-CMD] ' + text);
-  } else {
-    appendLog('[SYS] WebSocket 未连接');
-  }
+  wsSend('CMD:' + text, '📡');
 }
 
-// ── GPS card update ──
-const FIX_LABELS = ['无定位', 'GPS', 'DGPS', 'PPS', 'RTK固定', 'RTK浮动', '估算', '手动', '仿真'];
+// ── 🎮 D‑pad control ──
+function sendTurn(dir) {
+  wsSend('CMD:turn ' + dir, '🎮');
+}
+
+// ── 🎮 Custom keys A B C D ──
+function sendCustom(key) {
+  wsSend('CMD:' + key, '🎮');
+}
+
+// ── GPS card ──
+const FIX_LABELS = ['无定位','GPS','DGPS','PPS','RTK固定','RTK浮动','估算','手动','仿真'];
 function updateGpsCard(g) {
   const card = document.getElementById('gps-card');
   card.style.display = 'block';
-
   document.getElementById('gps-time').textContent = g.time || '—';
-  document.getElementById('gps-lat').textContent = (g.lat !== null) ? g.lat + '°' : '—';
-  document.getElementById('gps-lon').textContent = (g.lon !== null) ? g.lon + '°' : '—';
+  document.getElementById('gps-lat').textContent = (g.lat != null) ? g.lat + '°' : '—';
+  document.getElementById('gps-lon').textContent = (g.lon != null) ? g.lon + '°' : '—';
   document.getElementById('gps-alt').textContent = (g.alt != null) ? g.alt.toFixed(1) : '—';
   document.getElementById('gps-fix').textContent = FIX_LABELS[g.fix] || ('类型' + g.fix);
   document.getElementById('gps-sat-used').textContent = g.sat_used ?? '—';
@@ -369,29 +449,24 @@ function updateGpsCard(g) {
   document.getElementById('gps-hdop').textContent = (g.hdop != null) ? g.hdop.toFixed(1) : '—';
   document.getElementById('gps-vdop').textContent = (g.vdop != null) ? g.vdop.toFixed(1) : '—';
 
-  /* Antenna status */
   const antEl = document.getElementById('gps-ant');
   antEl.textContent = g.antenna ? '✅ 正常' : '⚠️ 开路';
   antEl.style.color = g.antenna ? 'var(--green)' : 'var(--red)';
 
-  /* Fix badge */
   const badge = document.getElementById('gps-fix-badge');
   if (g.fix > 0) {
     badge.textContent = '已定位';
-    badge.style.background = '#dcfce7';
-    badge.style.color = '#166534';
+    badge.className = 'badge badge-green';
   } else {
     badge.textContent = '未定位';
-    badge.style.background = '#fee2e2';
-    badge.style.color = '#991b1b';
+    badge.className = 'badge badge-red';
   }
 }
 
-// ── IMU card update ──
+// ── IMU card ──
 function updateImuCard(imu) {
   const card = document.getElementById('imu-card');
   card.style.display = 'block';
-
   document.getElementById('imu-ax').textContent = (imu.accel != null) ? imu.accel[0].toFixed(3) : '—';
   document.getElementById('imu-ay').textContent = (imu.accel != null) ? imu.accel[1].toFixed(3) : '—';
   document.getElementById('imu-az').textContent = (imu.accel != null) ? imu.accel[2].toFixed(3) : '—';
@@ -413,29 +488,20 @@ function updateImuCard(imu) {
   }
 }
 
-// ── Mag card update ──
+// ── Mag card ──
 function updateMagCard(mag) {
   const card = document.getElementById('imu-card');
+  const title = document.getElementById('imu-title');
   card.style.display = 'block';
-
-  // Update card title to reflect magnetometer
-  const titleEl = card.querySelector('h2');
-  if (titleEl && !titleEl.textContent.includes('AK09911C')) {
-    titleEl.innerHTML = '📐 磁力计 AK09911C <span id="imu-rate-badge" style="font-size:12px;padding:2px 8px;border-radius:10px;margin-left:8px;background:#eff6ff;color:#1e40af;">100Hz</span>';
-  }
+  title.textContent = '磁力计 AK09911C';
 
   if (mag.mag != null) {
     document.getElementById('imu-mx').textContent = mag.mag[0].toFixed(2);
     document.getElementById('imu-my').textContent = mag.mag[1].toFixed(2);
     document.getElementById('imu-mz').textContent = mag.mag[2].toFixed(2);
   }
-
   const azEl = document.getElementById('imu-azimuth');
-  if (mag.azimuth != null) {
-    azEl.textContent = mag.azimuth.toFixed(2);
-  } else {
-    azEl.textContent = '—';
-  }
+  azEl.textContent = (mag.azimuth != null) ? mag.azimuth.toFixed(2) : '—';
 }
 
 // ── Start ──
