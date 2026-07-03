@@ -6,23 +6,23 @@
 <title>ESP32 控制台</title>
 <style>
   :root {
-    --bg: #0b1121;
-    --card: #111827;
-    --border: #1e293b;
-    --txt: #e2e8f0;
-    --sub: #94a3b8;
-    --blue: #38bdf8;
-    --green: #4ade80;
-    --red: #f87171;
-    --orange: #fb923c;
-    --purple: #c084fc;
+    --bg: #f0f2f5;
+    --card: #fff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --blue: #2563eb;
+    --green: #16a34a;
+    --red: #dc2626;
+    --orange: #ea580c;
+    --border: #e5e7eb;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
   body {
-    background: radial-gradient(ellipse at 50% 0%, #1a2332 0%, var(--bg) 70%);
-    color: var(--txt);
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter','Segoe UI',system-ui,sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -38,87 +38,88 @@
   }
   #nav-bar a {
     display: block; padding: 7px 16px;
-    background: rgba(0,0,0,0.72); color: #ccc;
+    background: rgba(30,41,59,0.88); color: #cbd5e1;
     text-decoration: none; font-size: 13px;
     font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
     backdrop-filter: blur(6px); transition: all 0.2s;
-    border-right: 1px solid rgba(255,255,255,0.1);
-    white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,0.1); white-space: nowrap;
   }
   #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
   #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
-  #nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
-  #nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+  #nav-bar a:hover { background: rgba(37,99,235,0.75); color: #fff; }
+  #nav-bar a.active { background: rgba(37,99,235,0.85); color: #fff; font-weight: bold; }
 
-  /* ═══════════ Header ═══════════ */
-  header {
-    width: 100%; padding: 14px 24px 14px;
-    display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    background: rgba(17,24,39,0.6);
-    backdrop-filter: blur(12px);
+  /* ═══════════ Topbar ═══════════ */
+  .topbar {
+    width: 100%; height: 48px;
+    display: flex; align-items: center;
+    padding: 0 20px;
+    background: #1e293b; color: #f1f5f9; font-size: 14px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.12);
   }
-  header h1 { font-size: 20px; font-weight: 700; }
-  header h1 span { color: var(--blue); }
-  .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); }
+  .topbar .brand { font-weight: 600; letter-spacing: 0.5px; }
+  .topbar .brand span { color: #38bdf8; }
+  .topbar .spacer { flex: 1; }
+  .status-row { display: flex; align-items: center; gap: 7px; font-size: 13px; }
   .status-dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: #ef4444; box-shadow: 0 0 6px #ef4444;
-    transition: all 0.3s;
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }
-  .status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+  .status-dot.off { background: #f87171; }
+  .status-dot.on  { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
 
-  /* ═══════════ D-Pad ═══════════ */
-  .dpad-wrap {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    padding: 16px; width: 100%; max-width: 500px;
+  /* ═══════════ Content ═══════════ */
+  .content {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; padding: 16px; gap: 16px;
+    max-width: 500px; width: 100%;
   }
+
+  /* ═══════════ D-Pad card ═══════════ */
+  .card {
+    background: var(--card); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 20px;
+    width: 100%; display: flex; flex-direction: column; align-items: center;
+  }
+  .card h2 { font-size: 15px; font-weight: 600; color: #374151; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+
   .dpad {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr 1fr;
-    gap: 10px;
-    width: min(300px, 78vw);
-    height: min(300px, 78vw);
+    grid-template-columns: 80px 80px 80px;
+    grid-template-rows: 80px 80px 80px;
+    gap: 8px; justify-content: center;
   }
   .dbtn {
-    border: 2px solid var(--border); border-radius: 20px;
-    background: var(--card); color: var(--txt);
-    font-size: 30px; cursor: pointer;
+    border: 2px solid var(--border); border-radius: 18px;
+    background: #f8fafc; color: var(--text);
+    font-size: 28px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all 0.12s ease;
-    touch-action: manipulation;
+    transition: all 0.1s; touch-action: manipulation;
     flex-direction: column; gap: 1px;
   }
-  .dbtn .arr { font-size: 32px; line-height: 1; pointer-events: none; }
-  .dbtn .lbl { font-size: 10px; opacity: 0.6; pointer-events: none; }
+  .dbtn .arr { font-size: 28px; line-height: 1; pointer-events: none; }
+  .dbtn .lbl { font-size: 10px; color: var(--muted); pointer-events: none; }
   .dbtn:active, .dbtn.pressed {
-    background: #1e3a5f; border-color: var(--blue);
-    box-shadow: 0 0 24px rgba(56,189,248,0.4);
+    background: #dbeafe; border-color: var(--blue);
+    box-shadow: 0 0 16px rgba(37,99,235,0.25);
     transform: scale(0.94);
   }
   .dbtn-stop {
-    background: rgba(248,113,113,0.1);
-    border-color: rgba(248,113,113,0.3);
-    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    background: #fef2f2; border-color: #fecaca;
+    font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--red);
   }
   .dbtn-stop:active, .dbtn-stop.pressed {
-    background: rgba(248,113,113,0.25);
-    border-color: var(--red);
-    box-shadow: 0 0 24px rgba(248,113,113,0.4);
+    background: #fee2e2; border-color: var(--red);
+    box-shadow: 0 0 16px rgba(220,38,38,0.25);
   }
 
-  /* ═══════════ Custom ABCD ═══════════ */
-  .custom-row {
-    display: flex; gap: 12px; justify-content: center;
-    padding: 0 20px 10px; width: 100%; max-width: 500px;
-  }
+  /* ═══════════ ABCD buttons ═══════════ */
+  .custom-row { display: flex; gap: 12px; width: 100%; }
   .cbtn {
-    flex: 1; max-width: 90px; padding: 16px 0;
-    border: none; border-radius: 16px;
+    flex: 1; padding: 16px 0; border: none; border-radius: 12px;
     font-size: 22px; font-weight: 800; letter-spacing: 1px;
     cursor: pointer; color: #fff;
-    transition: all 0.12s; touch-action: manipulation;
+    transition: all 0.1s; touch-action: manipulation;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   }
   .cbtn:active { transform: scale(0.93); }
   .cbtn-a { background: #ef4444; }
@@ -126,40 +127,34 @@
   .cbtn-c { background: #10b981; }
   .cbtn-d { background: #f59e0b; }
 
-  /* ═══════════ Log ═══════════ */
-  .log-wrap {
-    width: 100%; max-width: 500px; padding: 0 20px 24px;
-  }
-  .log-title {
-    font-size: 11px; color: var(--sub); text-transform: uppercase;
-    letter-spacing: 1px; margin-bottom: 6px;
-  }
+  /* ═══════════ Log card ═══════════ */
   .log-box {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 12px 16px;
-    max-height: 130px; overflow-y: auto;
-    font-family: 'SF Mono','Consolas',monospace;
-    font-size: 12px; color: var(--sub); line-height: 1.7;
+    width: 100%; max-height: 150px; overflow-y: auto;
+    font-family: 'Cascadia Code','SF Mono','Consolas',monospace;
+    font-size: 12px; line-height: 1.7;
+    background: #f8fafc; border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; color: var(--text);
   }
   .log-box .entry { display: flex; gap: 8px; }
-  .log-box .time { color: #64748b; flex-shrink: 0; }
+  .log-box .time { color: var(--muted); flex-shrink: 0; font-size: 11px; }
   .log-box .cmd { color: var(--blue); }
   .log-box .err { color: var(--red); }
 
-  /* ═══════════ Keyboard hint ═══════════ */
+  /* ═══════════ Hint ═══════════ */
   .hint {
-    padding: 6px 0 16px; text-align: center;
-    font-size: 11px; color: #475569;
+    text-align: center; font-size: 11px; color: var(--muted);
   }
   .hint kbd {
     display: inline-block; padding: 2px 7px;
     background: var(--card); border: 1px solid var(--border);
     border-radius: 4px; font-family: inherit; font-size: 11px; margin: 0 2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   }
 
-  @media (max-width: 400px) {
-    .dpad { width: min(260px, 85vw); height: min(260px, 85vw); gap: 8px; }
-    .dbtn .arr { font-size: 26px; }
+  @media (max-width: 420px) {
+    .dpad { grid-template-columns: 64px 64px 64px; grid-template-rows: 64px 64px 64px; }
+    .dbtn .arr { font-size: 24px; }
+    .content { padding: 12px; }
   }
 </style>
 </head>
@@ -173,48 +168,60 @@
   <a href="/control" class="active">🎮 控制</a>
 </nav>
 
-<header>
-  <h1>🎮 <span>ESP32</span> 控制台</h1>
+<!-- ═══════════ Topbar ═══════════ -->
+<div class="topbar">
+  <div class="brand">🎮 <span>ESP32</span> 控制台</div>
+  <div class="spacer"></div>
   <div class="status-row">
-    <div class="status-dot" id="statusDot"></div>
+    <div class="status-dot off" id="statusDot"></div>
     <span id="statusText">就绪</span>
   </div>
-</header>
+</div>
 
-<div class="dpad-wrap">
-  <div class="dpad">
-    <button class="dbtn" id="btnUp" style="grid-column:2;grid-row:1">
-      <span class="arr">▲</span><span class="lbl">前进</span>
-    </button>
-    <button class="dbtn" id="btnLeft" style="grid-column:1;grid-row:2">
-      <span class="arr">◀</span><span class="lbl">左转</span>
-    </button>
-    <button class="dbtn dbtn-stop" id="btnStop" style="grid-column:2;grid-row:2">STOP</button>
-    <button class="dbtn" id="btnRight" style="grid-column:3;grid-row:2">
-      <span class="arr">▶</span><span class="lbl">右转</span>
-    </button>
-    <button class="dbtn" id="btnDown" style="grid-column:2;grid-row:3">
-      <span class="arr">▼</span><span class="lbl">后退</span>
-    </button>
+<div class="content">
+  <!-- D-Pad -->
+  <div class="card">
+    <h2>方向控制</h2>
+    <div class="dpad">
+      <button class="dbtn" id="btnUp" style="grid-column:2;grid-row:1">
+        <span class="arr">▲</span><span class="lbl">前进</span>
+      </button>
+      <button class="dbtn" id="btnLeft" style="grid-column:1;grid-row:2">
+        <span class="arr">◀</span><span class="lbl">左转</span>
+      </button>
+      <button class="dbtn dbtn-stop" id="btnStop" style="grid-column:2;grid-row:2">STOP</button>
+      <button class="dbtn" id="btnRight" style="grid-column:3;grid-row:2">
+        <span class="arr">▶</span><span class="lbl">右转</span>
+      </button>
+      <button class="dbtn" id="btnDown" style="grid-column:2;grid-row:3">
+        <span class="arr">▼</span><span class="lbl">后退</span>
+      </button>
+    </div>
   </div>
-</div>
 
-<div class="custom-row">
-  <button class="cbtn cbtn-a" id="btnA">A</button>
-  <button class="cbtn cbtn-b" id="btnB">B</button>
-  <button class="cbtn cbtn-c" id="btnC">C</button>
-  <button class="cbtn cbtn-d" id="btnD">D</button>
-</div>
+  <!-- Custom keys -->
+  <div class="card">
+    <h2>自定义按键</h2>
+    <div class="custom-row">
+      <button class="cbtn cbtn-a" id="btnA">A</button>
+      <button class="cbtn cbtn-b" id="btnB">B</button>
+      <button class="cbtn cbtn-c" id="btnC">C</button>
+      <button class="cbtn cbtn-d" id="btnD">D</button>
+    </div>
+  </div>
 
-<div class="hint">
-  键盘: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或 <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
-  &nbsp;|&nbsp; 自定义: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>
-</div>
+  <!-- Hint -->
+  <div class="hint">
+    键盘: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或 <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
+    &nbsp;|&nbsp; 自定义: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>
+  </div>
 
-<div class="log-wrap">
-  <div class="log-title">📋 指令日志</div>
-  <div class="log-box" id="logBox">
-    <span style="color:#64748b">按下方向键发送指令...</span>
+  <!-- Log -->
+  <div class="card">
+    <h2>📋 指令日志</h2>
+    <div class="log-box" id="logBox">
+      <span style="color:var(--muted)">按下方向键发送指令...</span>
+    </div>
   </div>
 </div>
 
@@ -229,42 +236,25 @@ let ws = null;
 
 function connect() {
   ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    updateStatus(true);
-    addLog('已连接', 'sys');
-  };
-  ws.onclose = () => {
-    updateStatus(false);
-    addLog('连接断开，2s 重连…', 'err');
-    setTimeout(connect, 2000);
-  };
+  ws.onopen = () => { updateStatus(true); addLog('已连接', 'sys'); };
+  ws.onclose = () => { updateStatus(false); addLog('断开, 2s 重连…', 'err'); setTimeout(connect, 2000); };
   ws.onerror = () => updateStatus(false);
 }
 
-// ── Status ──
 async function pollHealth() {
-  try {
-    const r = await fetch('/health');
-    const j = await r.json();
-    updateStatus(j.esp32_connected);
-  } catch(e) { updateStatus(false); }
+  try { const r = await fetch('/health'); const j = await r.json(); updateStatus(j.esp32_connected); }
+  catch(e) { updateStatus(false); }
 }
 
 function updateStatus(online) {
   const dot = document.getElementById('statusDot');
   const txt = document.getElementById('statusText');
-  if (online) {
-    dot.className = 'status-dot online';
-    txt.textContent = 'ESP32 在线';
-  } else {
-    dot.className = 'status-dot';
-    txt.textContent = '等待连接…';
-  }
+  dot.className = 'status-dot ' + (online ? 'on' : 'off');
+  txt.textContent = online ? 'ESP32 在线' : '等待连接…';
 }
 
 // ── Send ──
 function sendCmd(cmd) {
-  const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send('CMD:' + cmd);
     addLog(cmd, 'ok');
@@ -281,19 +271,15 @@ function addLog(text, type) {
   if (logLines.length > 50) logLines.pop();
   renderLog();
 }
-
 function renderLog() {
   const box = document.getElementById('logBox');
   box.innerHTML = logLines.slice(0, 20).map(l =>
-    `<div class="entry"><span class="time">${l.time}</span>` +
-    `<span class="${l.type==='err'?'err':'cmd'}">${l.text}</span></div>`
-  ).join('') || '<span style="color:#64748b">等待操作...</span>';
+    `<div class="entry"><span class="time">${l.time}</span><span class="${l.type==='err'?'err':'cmd'}">${l.text}</span></div>`
+  ).join('') || '<span style="color:var(--muted)">等待操作...</span>';
 }
 
 // ── Repeat (long-press) ──
-let activeDir = null;
-let repeatTimer = null;
-
+let activeDir = null, repeatTimer = null;
 function startRepeat(dir) {
   if (activeDir === dir) return;
   stopRepeat();
@@ -301,13 +287,12 @@ function startRepeat(dir) {
   sendCmd('turn ' + dir);
   repeatTimer = setInterval(() => sendCmd('turn ' + dir), REPEAT_MS);
 }
-
 function stopRepeat() {
   if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
   if (activeDir) { sendCmd('turn stop'); activeDir = null; }
 }
 
-// ── Bind D-pad buttons ──
+// ── Bind D-pad ──
 function bindPad(id, dir) {
   const btn = document.getElementById(id);
   const down = (e) => { e.preventDefault(); btn.classList.add('pressed'); startRepeat(dir); };
@@ -319,28 +304,20 @@ function bindPad(id, dir) {
   btn.addEventListener('touchend', up);
   btn.addEventListener('touchcancel', up);
 }
-
 bindPad('btnUp',    'forward');
 bindPad('btnDown',  'backward');
 bindPad('btnLeft',  'left');
 bindPad('btnRight', 'right');
 
-// STOP button
 ['click','touchend'].forEach(ev =>
-  document.getElementById('btnStop').addEventListener(ev, (e) => {
-    e.preventDefault();
-    stopRepeat();
-  })
+  document.getElementById('btnStop').addEventListener(ev, (e) => { e.preventDefault(); stopRepeat(); })
 );
 
 // ── Bind ABCD ──
 ['A','B','C','D'].forEach(k => {
   const btn = document.getElementById('btn'+k);
   const down = (e) => { e.preventDefault(); btn.style.opacity = '0.7'; };
-  const up   = (e) => {
-    e.preventDefault(); btn.style.opacity = '1';
-    sendCmd(k);
-  };
+  const up   = (e) => { e.preventDefault(); btn.style.opacity = '1'; sendCmd(k); };
   btn.addEventListener('mousedown', down);
   btn.addEventListener('mouseup', up);
   btn.addEventListener('mouseleave', up);
@@ -350,22 +327,15 @@ bindPad('btnRight', 'right');
 });
 
 // ── Keyboard ──
-const keyDir = {
-  ArrowUp:'forward', ArrowDown:'backward', ArrowLeft:'left', ArrowRight:'right',
-  w:'forward', s:'backward', a:'left', d:'right',
-  W:'forward', S:'backward', A:'left', D:'right'
-};
+const keyDir = { ArrowUp:'forward', ArrowDown:'backward', ArrowLeft:'left', ArrowRight:'right', w:'forward', s:'backward', a:'left', d:'right', W:'forward', S:'backward', A:'left', D:'right' };
 const keyCustom = { '1':'A', '2':'B', '3':'C', '4':'D' };
 const btnMap = { forward:'btnUp', backward:'btnDown', left:'btnLeft', right:'btnRight' };
-
-let keyActive = null;
-let keyTimer = null;
+let keyActive = null, keyTimer = null;
 
 document.addEventListener('keydown', (e) => {
   const dir = keyDir[e.key];
   if (dir) {
     e.preventDefault();
-    if (keyCustom[e.key] !== undefined) return; // don't double-handle
     const btn = document.getElementById(btnMap[dir]);
     if (btn) btn.classList.add('pressed');
     if (keyActive === dir) return;
@@ -377,23 +347,18 @@ document.addEventListener('keydown', (e) => {
   }
   const c = keyCustom[e.key];
   if (c) {
-    e.preventDefault();
-    sendCmd(c);
+    e.preventDefault(); sendCmd(c);
     const btn = document.getElementById('btn'+c);
     if (btn) { btn.style.opacity = '0.7'; setTimeout(() => btn.style.opacity = '1', 100); }
   }
 });
-
 document.addEventListener('keyup', (e) => {
   const dir = keyDir[e.key];
   if (dir) {
     e.preventDefault();
     const btn = document.getElementById(btnMap[dir]);
     if (btn) btn.classList.remove('pressed');
-    if (keyActive === dir) {
-      clearInterval(keyTimer); keyTimer = null; keyActive = null;
-      sendCmd('turn stop');
-    }
+    if (keyActive === dir) { clearInterval(keyTimer); keyTimer = null; keyActive = null; sendCmd('turn stop'); }
   }
 });
 
