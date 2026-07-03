@@ -170,11 +170,13 @@ async def ws_frontend(websocket: WebSocket):
 # ── Serve static frontend ─────────────────────────────────────
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    return FileResponse("static/index.html",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/control")
 async def control():
-    return FileResponse("static/control.html")
+    return FileResponse("static/control.html",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 # ── Health check ──────────────────────────────────────────────
 @app.get("/health")
