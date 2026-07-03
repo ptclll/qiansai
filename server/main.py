@@ -172,6 +172,10 @@ async def ws_frontend(websocket: WebSocket):
 async def root():
     return FileResponse("static/index.html")
 
+@app.get("/control")
+async def control():
+    return FileResponse("static/control.html")
+
 # ── Health check ──────────────────────────────────────────────
 @app.get("/health")
 async def health():

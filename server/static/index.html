@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>ESP32-S3 控制台</title>
+<title>ESP32-S3 串口监视器</title>
 <style>
   :root {
     --bg: #f0f2f5;
@@ -18,38 +18,54 @@
     --shadow: 0 2px 12px rgba(0,0,0,0.05);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    padding-top: 56px; /* space for sticky bar */
+    padding-top: 48px;
   }
 
-  /* ═══════════════════════════════════════════
-     Sticky status bar
-     ═══════════════════════════════════════════ */
+  /* ═══════════ Unified nav bar ═══════════ */
+  #nav-bar {
+    position: fixed; top: 0; right: 0; z-index: 10001;
+    display: flex; gap: 0; padding: 8px 14px;
+  }
+  #nav-bar a {
+    display: block; padding: 7px 16px;
+    background: rgba(0,0,0,0.72); color: #ccc;
+    text-decoration: none; font-size: 13px;
+    font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+    backdrop-filter: blur(6px); transition: all 0.2s;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+  }
+  #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+  #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+  #nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+  #nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+
+  /* ═══════════ Sticky topbar ═══════════ */
   .topbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     display: flex; align-items: center; gap: 10px;
     height: 48px; padding: 0 16px;
     background: #1e293b; color: #f1f5f9; font-size: 14px;
     box-shadow: 0 1px 8px rgba(0,0,0,0.18);
-    user-select: none;
   }
-  .topbar .brand { font-weight: 600; letter-spacing: 0.5px; margin-right: 4px; }
+  .topbar .brand { font-weight: 600; letter-spacing: 0.5px; }
   .topbar .dot {
     width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
   }
   .topbar .dot.on  { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
   .topbar .dot.off { background: #f87171; }
   .topbar .spacer { flex: 1; }
-  .topbar .clock { font-variant-numeric: tabular-nums; opacity: 0.8; font-size: 13px; }
+  .topbar .azimuth { font-weight: 600; color: #38bdf8; font-size: 15px; margin-right: 6px; }
+  .topbar .clock { font-variant-numeric: tabular-nums; opacity: 0.7; font-size: 13px; margin-left: 8px; }
 
-  /* ═══════════════════════════════════════════
-     Container & cards
-     ═══════════════════════════════════════════ */
-  .container { max-width: 780px; margin: 0 auto; padding: 12px 12px 24px; }
+  /* ═══════════ Container & cards ═══════════ */
+  .container { max-width: 780px; margin: 0 auto; padding: 10px 12px 24px; }
 
   .card {
     background: var(--card); border-radius: 12px;
@@ -57,12 +73,10 @@
   }
   .card h2 {
     font-size: 15px; font-weight: 600; margin-bottom: 10px;
-    display: flex; align-items: center; gap: 6px;
-    color: #374151;
+    display: flex; align-items: center; gap: 6px; color: #374151;
   }
   .card h2 .icon { font-size: 17px; }
 
-  /* ── Badge tag ── */
   .badge {
     font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500;
   }
@@ -71,14 +85,12 @@
   .badge-green  { background: #dcfce7; color: #166534; }
   .badge-red    { background: #fee2e2; color: #991b1b; }
 
-  /* ── Data grid (GPS / IMU) ── */
   .data-grid { display: grid; gap: 8px 12px; font-size: 13px; }
   .data-grid.cols-2 { grid-template-columns: 1fr 1fr; }
   .data-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
   .data-grid .kv b { color: var(--muted); font-weight: 500; }
   .data-grid .kv span { font-variant-numeric: tabular-nums; }
 
-  /* ── UART log ── */
   #uart-log {
     width: 100%; min-height: 200px; max-height: 40vh;
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
@@ -89,7 +101,6 @@
   }
   .ts { color: var(--muted); font-size: 11px; }
 
-  /* ── Buttons & inputs ── */
   .input-row { display: flex; gap: 8px; }
   .input-row input {
     flex: 1; padding: 9px 12px; font-size: 14px;
@@ -101,8 +112,7 @@
   .btn {
     padding: 9px 18px; border: none; border-radius: 8px;
     font-size: 14px; cursor: pointer; font-weight: 500;
-    transition: background 0.15s, transform 0.1s; color: #fff;
-    white-space: nowrap;
+    transition: background 0.15s, transform 0.1s; color: #fff; white-space: nowrap;
   }
   .btn:active { transform: scale(0.96); }
   .btn-blue  { background: var(--blue); }
@@ -120,106 +130,34 @@
   }
   .chip:hover { background: #eff6ff; border-color: var(--blue); color: var(--blue); }
 
-  /* ═══════════════════════════════════════════
-     D‑pad control
-     ═══════════════════════════════════════════ */
-  .dpad {
-    display: grid; grid-template-columns: 80px 80px 80px;
-    grid-template-rows: 80px 80px 80px;
-    gap: 6px; justify-content: center;
-    margin: 6px 0 14px;
-  }
-  .dpad .empty { visibility: hidden; }
-
-  .dbtn {
-    border: none; border-radius: 14px;
-    font-size: 15px; font-weight: 600; cursor: pointer;
-    transition: all 0.12s; user-select: none;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 2px;
-  }
-  .dbtn:active { transform: scale(0.93); }
-
-  .dbtn-up    { background: #3b82f6; color: #fff; grid-column: 2; grid-row: 1; }
-  .dbtn-left  { background: #f59e0b; color: #fff; grid-column: 1; grid-row: 2; }
-  .dbtn-stop  { background: #e2e8f0; color: #64748b; grid-column: 2; grid-row: 2;
-                 font-size: 13px; }
-  .dbtn-right { background: #f59e0b; color: #fff; grid-column: 3; grid-row: 2; }
-  .dbtn-down  { background: #3b82f6; color: #fff; grid-column: 2; grid-row: 3; }
-
-  .dbtn .arr { font-size: 26px; line-height: 1; }
-  .dbtn .lbl { font-size: 11px; opacity: 0.85; }
-
-  /* ── Custom ABCD buttons ── */
-  .custom-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .cbtn {
-    flex: 1; min-width: 60px; max-width: 100px; padding: 14px 0;
-    border: none; border-radius: 12px; font-size: 20px; font-weight: 700;
-    cursor: pointer; transition: all 0.12s; user-select: none;
-    color: #fff; letter-spacing: 1px;
-  }
-  .cbtn:active { transform: scale(0.94); }
-  .cbtn-a { background: #ef4444; }
-  .cbtn-b { background: #8b5cf6; }
-  .cbtn-c { background: #10b981; }
-  .cbtn-d { background: #f59e0b; }
-
-  /* ═══════════════════════════════════════════
-     Responsive
-     ═══════════════════════════════════════════ */
   @media (max-width: 500px) {
     .container { padding: 8px; }
-    .dpad { grid-template-columns: 64px 64px 64px; grid-template-rows: 64px 64px 64px; }
-    .dbtn .arr { font-size: 22px; }
     .data-grid.cols-2, .data-grid.cols-3 { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
-<!-- ═══════════ Sticky top bar ═══════════ -->
+<!-- ═══════════ Nav bar ═══════════ -->
+<nav id="nav-bar">
+  <a href="http://8.148.208.229/">🗺️ 地图</a>
+  <a href="/" class="active">📟 串口</a>
+  <a href="http://8.148.208.229/imagic">🖼️ 图片</a>
+  <a href="/control">🎮 控制</a>
+</nav>
+
+<!-- ═══════════ Topbar ═══════════ -->
 <div class="topbar">
   <span class="brand">ESP32-S3</span>
   <span class="dot" id="esp32-dot"></span>
   <span id="esp32-label">—</span>
   <span class="spacer"></span>
+  <span class="azimuth" id="az-display">🧭 —°</span>
   <span class="clock" id="clock"></span>
 </div>
 
 <!-- ═══════════ Content ═══════════ -->
 <div class="container">
-
-  <!-- 🎮 Control panel -->
-  <div class="card">
-    <h2><span class="icon">🎮</span> 控制</h2>
-
-    <!-- D-pad -->
-    <div class="dpad">
-      <button class="dbtn dbtn-up" onclick="sendTurn('forward')">
-        <span class="arr">▲</span><span class="lbl">前进</span>
-      </button>
-      <button class="dbtn dbtn-left" onclick="sendTurn('left')">
-        <span class="arr">◀</span><span class="lbl">左转</span>
-      </button>
-      <button class="dbtn dbtn-stop" onclick="sendTurn('stop')">
-        <span class="arr" style="font-size:18px;">■</span><span class="lbl">停止</span>
-      </button>
-      <button class="dbtn dbtn-right" onclick="sendTurn('right')">
-        <span class="arr">▶</span><span class="lbl">右转</span>
-      </button>
-      <button class="dbtn dbtn-down" onclick="sendTurn('backward')">
-        <span class="arr">▼</span><span class="lbl">后退</span>
-      </button>
-    </div>
-
-    <!-- Custom keys A B C D -->
-    <div class="custom-row">
-      <button class="cbtn cbtn-a" onclick="sendCustom('A')">A</button>
-      <button class="cbtn cbtn-b" onclick="sendCustom('B')">B</button>
-      <button class="cbtn cbtn-c" onclick="sendCustom('C')">C</button>
-      <button class="cbtn cbtn-d" onclick="sendCustom('D')">D</button>
-    </div>
-  </div>
 
   <!-- 📟 UART log -->
   <div class="card">
@@ -233,7 +171,7 @@
     </div>
   </div>
 
-  <!-- 🛰️ GPS parsed data -->
+  <!-- 🛰️ GPS -->
   <div class="card" id="gps-card" style="display:none;">
     <h2><span class="icon">🛰️</span> GPS 解析数据 <span id="gps-fix-badge" class="badge"></span></h2>
     <div class="data-grid cols-2">
@@ -253,7 +191,7 @@
     </div>
   </div>
 
-  <!-- 📐 IMU / Magnetometer data -->
+  <!-- 📐 IMU / Magnetometer -->
   <div class="card" id="imu-card" style="display:none;">
     <h2><span class="icon">📐</span> <span id="imu-title">传感器数据</span> <span id="imu-rate-badge" class="badge badge-blue">100Hz</span></h2>
     <div class="data-grid cols-3">
@@ -272,7 +210,7 @@
     </div>
   </div>
 
-  <!-- 📡 ESP32 command -->
+  <!-- 📡 ESP32 CMD -->
   <div class="card">
     <h2><span class="icon">📡</span> ESP32 指令 <span class="badge badge-yellow">esp_log</span></h2>
     <div class="input-row">
@@ -288,7 +226,7 @@
     </div>
   </div>
 
-  <!-- 📤 Send to UART1 -->
+  <!-- 📤 UART1 -->
   <div class="card">
     <h2><span class="icon">📤</span> 发送到 UART1</h2>
     <div class="input-row">
@@ -317,7 +255,6 @@ const dotEl    = document.getElementById('esp32-dot');
 const labelEl  = document.getElementById('esp32-label');
 const clockEl  = document.getElementById('clock');
 const autoScrollCb = document.getElementById('auto-scroll');
-
 let esp32Online = false;
 
 // ── Clock ──
@@ -333,13 +270,13 @@ let ws = null;
 
 function connect() {
   ws = new WebSocket(wsUrl);
-  ws.onopen  = () => console.log('Frontend WS connected');
-  ws.onclose = () => { console.log('WS closed, reconnecting in 2s…'); setTimeout(connect, 2000); };
+  ws.onopen  = () => console.log('WS connected');
+  ws.onclose = () => { setTimeout(connect, 2000); };
   ws.onerror = () => {};
   ws.onmessage = (e) => appendLog(e.data);
 }
 
-// ── ESP32 health polling ──
+// ── Health ──
 async function pollStatus() {
   try {
     const r = await fetch('/health');
@@ -355,11 +292,11 @@ async function pollStatus() {
 setInterval(pollStatus, 3000);
 pollStatus();
 
-// ── Generic send helper ──
-function wsSend(text, logPrefix) {
+// ── Generic send ──
+function wsSend(text, prefix) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(text);
-    appendLog(logPrefix + ' ' + text.replace(/^CMD:/,''));
+    appendLog(prefix + ' ' + text.replace(/^CMD:/,''));
     return true;
   }
   appendLog('[SYS] WebSocket 未连接');
@@ -374,7 +311,6 @@ function escHtml(s) {
 }
 
 function appendLog(text) {
-  /* Route JSON to data cards */
   if (text.startsWith('{') && text.includes('"type":"gps"')) {
     try { updateGpsCard(JSON.parse(text)); return; } catch(e) {}
   }
@@ -382,7 +318,14 @@ function appendLog(text) {
     try { updateImuCard(JSON.parse(text)); return; } catch(e) {}
   }
   if (text.startsWith('{') && text.includes('"type":"mag"')) {
-    try { updateMagCard(JSON.parse(text)); return; } catch(e) {}
+    try {
+      const mag = JSON.parse(text);
+      if (mag.azimuth != null) {
+        document.getElementById('az-display').textContent = '🧭 ' + mag.azimuth.toFixed(1) + '°';
+      }
+      updateMagCard(mag);
+      return;
+    } catch(e) {}
   }
 
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -400,10 +343,7 @@ function sendData() {
   inputEl.value = '';
   inputEl.focus();
 }
-
-function sendPreset(text) {
-  wsSend(text, '→');
-}
+function sendPreset(text) { wsSend(text, '→'); }
 
 // ── ESP32 CMD ──
 function sendCmd() {
@@ -414,31 +354,17 @@ function sendCmd() {
   el.value = '';
   el.focus();
 }
-
-function sendCmdPreset(text) {
-  wsSend('CMD:' + text, '📡');
-}
-
-// ── 🎮 D‑pad control ──
-function sendTurn(dir) {
-  wsSend('CMD:turn ' + dir, '🎮');
-}
-
-// ── 🎮 Custom keys A B C D ──
-function sendCustom(key) {
-  wsSend('CMD:' + key, '🎮');
-}
+function sendCmdPreset(text) { wsSend('CMD:' + text, '📡'); }
 
 // ── GPS card ──
 const FIX_LABELS = ['无定位','GPS','DGPS','PPS','RTK固定','RTK浮动','估算','手动','仿真'];
 function updateGpsCard(g) {
-  const card = document.getElementById('gps-card');
-  card.style.display = 'block';
+  document.getElementById('gps-card').style.display = 'block';
   document.getElementById('gps-time').textContent = g.time || '—';
   document.getElementById('gps-lat').textContent = (g.lat != null) ? g.lat + '°' : '—';
   document.getElementById('gps-lon').textContent = (g.lon != null) ? g.lon + '°' : '—';
   document.getElementById('gps-alt').textContent = (g.alt != null) ? g.alt.toFixed(1) : '—';
-  document.getElementById('gps-fix').textContent = FIX_LABELS[g.fix] || ('类型' + g.fix);
+  document.getElementById('gps-fix').textContent = FIX_LABELS[g.fix] || ('类型'+g.fix);
   document.getElementById('gps-sat-used').textContent = g.sat_used ?? '—';
   document.getElementById('gps-sat-view').textContent = g.sat_view ?? '—';
   document.getElementById('gps-gps-sat').textContent = g.gps_sat ?? '—';
@@ -455,18 +381,16 @@ function updateGpsCard(g) {
 
   const badge = document.getElementById('gps-fix-badge');
   if (g.fix > 0) {
-    badge.textContent = '已定位';
-    badge.className = 'badge badge-green';
+    badge.textContent = '已定位'; badge.className = 'badge badge-green';
   } else {
-    badge.textContent = '未定位';
-    badge.className = 'badge badge-red';
+    badge.textContent = '未定位'; badge.className = 'badge badge-red';
   }
 }
 
 // ── IMU card ──
 function updateImuCard(imu) {
-  const card = document.getElementById('imu-card');
-  card.style.display = 'block';
+  document.getElementById('imu-card').style.display = 'block';
+  document.getElementById('imu-title').textContent = 'MPU9250 IMU';
   document.getElementById('imu-ax').textContent = (imu.accel != null) ? imu.accel[0].toFixed(3) : '—';
   document.getElementById('imu-ay').textContent = (imu.accel != null) ? imu.accel[1].toFixed(3) : '—';
   document.getElementById('imu-az').textContent = (imu.accel != null) ? imu.accel[2].toFixed(3) : '—';
@@ -480,11 +404,9 @@ function updateImuCard(imu) {
 
   const magOkEl = document.getElementById('imu-mag-ok');
   if (imu.mag_ok) {
-    magOkEl.textContent = '✅ 正常';
-    magOkEl.style.color = 'var(--green)';
+    magOkEl.textContent = '✅ 正常'; magOkEl.style.color = 'var(--green)';
   } else {
-    magOkEl.textContent = '⚠️ 异常';
-    magOkEl.style.color = 'var(--red)';
+    magOkEl.textContent = '⚠️ 异常'; magOkEl.style.color = 'var(--red)';
   }
 }
 
@@ -494,7 +416,6 @@ function updateMagCard(mag) {
   const title = document.getElementById('imu-title');
   card.style.display = 'block';
   title.textContent = '磁力计 AK09911C';
-
   if (mag.mag != null) {
     document.getElementById('imu-mx').textContent = mag.mag[0].toFixed(2);
     document.getElementById('imu-my').textContent = mag.mag[1].toFixed(2);

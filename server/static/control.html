@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>ESP32 控制台</title>
+<style>
+  :root {
+    --bg: #0b1121;
+    --card: #111827;
+    --border: #1e293b;
+    --txt: #e2e8f0;
+    --sub: #94a3b8;
+    --blue: #38bdf8;
+    --green: #4ade80;
+    --red: #f87171;
+    --orange: #fb923c;
+    --purple: #c084fc;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #1a2332 0%, var(--bg) 70%);
+    color: var(--txt);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ═══════════ Nav bar ═══════════ */
+  #nav-bar {
+    position: fixed; top: 0; right: 0; z-index: 10001;
+    display: flex; gap: 0; padding: 8px 14px;
+  }
+  #nav-bar a {
+    display: block; padding: 7px 16px;
+    background: rgba(0,0,0,0.72); color: #ccc;
+    text-decoration: none; font-size: 13px;
+    font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+    backdrop-filter: blur(6px); transition: all 0.2s;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+  }
+  #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+  #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+  #nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+  #nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+
+  /* ═══════════ Header ═══════════ */
+  header {
+    width: 100%; padding: 14px 24px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: rgba(17,24,39,0.6);
+    backdrop-filter: blur(12px);
+  }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header h1 span { color: var(--blue); }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); }
+  .status-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #ef4444; box-shadow: 0 0 6px #ef4444;
+    transition: all 0.3s;
+  }
+  .status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+
+  /* ═══════════ D-Pad ═══════════ */
+  .dpad-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 16px; width: 100%; max-width: 500px;
+  }
+  .dpad {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 10px;
+    width: min(300px, 78vw);
+    height: min(300px, 78vw);
+  }
+  .dbtn {
+    border: 2px solid var(--border); border-radius: 20px;
+    background: var(--card); color: var(--txt);
+    font-size: 30px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s ease;
+    touch-action: manipulation;
+    flex-direction: column; gap: 1px;
+  }
+  .dbtn .arr { font-size: 32px; line-height: 1; pointer-events: none; }
+  .dbtn .lbl { font-size: 10px; opacity: 0.6; pointer-events: none; }
+  .dbtn:active, .dbtn.pressed {
+    background: #1e3a5f; border-color: var(--blue);
+    box-shadow: 0 0 24px rgba(56,189,248,0.4);
+    transform: scale(0.94);
+  }
+  .dbtn-stop {
+    background: rgba(248,113,113,0.1);
+    border-color: rgba(248,113,113,0.3);
+    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+  }
+  .dbtn-stop:active, .dbtn-stop.pressed {
+    background: rgba(248,113,113,0.25);
+    border-color: var(--red);
+    box-shadow: 0 0 24px rgba(248,113,113,0.4);
+  }
+
+  /* ═══════════ Custom ABCD ═══════════ */
+  .custom-row {
+    display: flex; gap: 12px; justify-content: center;
+    padding: 0 20px 10px; width: 100%; max-width: 500px;
+  }
+  .cbtn {
+    flex: 1; max-width: 90px; padding: 16px 0;
+    border: none; border-radius: 16px;
+    font-size: 22px; font-weight: 800; letter-spacing: 1px;
+    cursor: pointer; color: #fff;
+    transition: all 0.12s; touch-action: manipulation;
+  }
+  .cbtn:active { transform: scale(0.93); }
+  .cbtn-a { background: #ef4444; }
+  .cbtn-b { background: #8b5cf6; }
+  .cbtn-c { background: #10b981; }
+  .cbtn-d { background: #f59e0b; }
+
+  /* ═══════════ Log ═══════════ */
+  .log-wrap {
+    width: 100%; max-width: 500px; padding: 0 20px 24px;
+  }
+  .log-title {
+    font-size: 11px; color: var(--sub); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .log-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px;
+    max-height: 130px; overflow-y: auto;
+    font-family: 'SF Mono','Consolas',monospace;
+    font-size: 12px; color: var(--sub); line-height: 1.7;
+  }
+  .log-box .entry { display: flex; gap: 8px; }
+  .log-box .time { color: #64748b; flex-shrink: 0; }
+  .log-box .cmd { color: var(--blue); }
+  .log-box .err { color: var(--red); }
+
+  /* ═══════════ Keyboard hint ═══════════ */
+  .hint {
+    padding: 6px 0 16px; text-align: center;
+    font-size: 11px; color: #475569;
+  }
+  .hint kbd {
+    display: inline-block; padding: 2px 7px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 4px; font-family: inherit; font-size: 11px; margin: 0 2px;
+  }
+
+  @media (max-width: 400px) {
+    .dpad { width: min(260px, 85vw); height: min(260px, 85vw); gap: 8px; }
+    .dbtn .arr { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ Nav bar ═══════════ -->
+<nav id="nav-bar">
+  <a href="http://8.148.208.229/">🗺️ 地图</a>
+  <a href="/">📟 串口</a>
+  <a href="http://8.148.208.229/imagic">🖼️ 图片</a>
+  <a href="/control" class="active">🎮 控制</a>
+</nav>
+
+<header>
+  <h1>🎮 <span>ESP32</span> 控制台</h1>
+  <div class="status-row">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">就绪</span>
+  </div>
+</header>
+
+<div class="dpad-wrap">
+  <div class="dpad">
+    <button class="dbtn" id="btnUp" style="grid-column:2;grid-row:1">
+      <span class="arr">▲</span><span class="lbl">前进</span>
+    </button>
+    <button class="dbtn" id="btnLeft" style="grid-column:1;grid-row:2">
+      <span class="arr">◀</span><span class="lbl">左转</span>
+    </button>
+    <button class="dbtn dbtn-stop" id="btnStop" style="grid-column:2;grid-row:2">STOP</button>
+    <button class="dbtn" id="btnRight" style="grid-column:3;grid-row:2">
+      <span class="arr">▶</span><span class="lbl">右转</span>
+    </button>
+    <button class="dbtn" id="btnDown" style="grid-column:2;grid-row:3">
+      <span class="arr">▼</span><span class="lbl">后退</span>
+    </button>
+  </div>
+</div>
+
+<div class="custom-row">
+  <button class="cbtn cbtn-a" id="btnA">A</button>
+  <button class="cbtn cbtn-b" id="btnB">B</button>
+  <button class="cbtn cbtn-c" id="btnC">C</button>
+  <button class="cbtn cbtn-d" id="btnD">D</button>
+</div>
+
+<div class="hint">
+  键盘: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或 <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
+  &nbsp;|&nbsp; 自定义: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>
+</div>
+
+<div class="log-wrap">
+  <div class="log-title">📋 指令日志</div>
+  <div class="log-box" id="logBox">
+    <span style="color:#64748b">按下方向键发送指令...</span>
+  </div>
+</div>
+
+<script>
+const REPEAT_MS = 120;
+let logLines = [];
+
+// ── WebSocket ──
+const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const wsUrl = `${protocol}//${location.host}/ws/frontend`;
+let ws = null;
+
+function connect() {
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    updateStatus(true);
+    addLog('已连接', 'sys');
+  };
+  ws.onclose = () => {
+    updateStatus(false);
+    addLog('连接断开，2s 重连…', 'err');
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => updateStatus(false);
+}
+
+// ── Status ──
+async function pollHealth() {
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    updateStatus(j.esp32_connected);
+  } catch(e) { updateStatus(false); }
+}
+
+function updateStatus(online) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  if (online) {
+    dot.className = 'status-dot online';
+    txt.textContent = 'ESP32 在线';
+  } else {
+    dot.className = 'status-dot';
+    txt.textContent = '等待连接…';
+  }
+}
+
+// ── Send ──
+function sendCmd(cmd) {
+  const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send('CMD:' + cmd);
+    addLog(cmd, 'ok');
+    updateStatus(true);
+  } else {
+    addLog(cmd + ' (未连接)', 'err');
+  }
+}
+
+// ── Log ──
+function addLog(text, type) {
+  const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+  logLines.unshift({time, text, type});
+  if (logLines.length > 50) logLines.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const box = document.getElementById('logBox');
+  box.innerHTML = logLines.slice(0, 20).map(l =>
+    `<div class="entry"><span class="time">${l.time}</span>` +
+    `<span class="${l.type==='err'?'err':'cmd'}">${l.text}</span></div>`
+  ).join('') || '<span style="color:#64748b">等待操作...</span>';
+}
+
+// ── Repeat (long-press) ──
+let activeDir = null;
+let repeatTimer = null;
+
+function startRepeat(dir) {
+  if (activeDir === dir) return;
+  stopRepeat();
+  activeDir = dir;
+  sendCmd('turn ' + dir);
+  repeatTimer = setInterval(() => sendCmd('turn ' + dir), REPEAT_MS);
+}
+
+function stopRepeat() {
+  if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+  if (activeDir) { sendCmd('turn stop'); activeDir = null; }
+}
+
+// ── Bind D-pad buttons ──
+function bindPad(id, dir) {
+  const btn = document.getElementById(id);
+  const down = (e) => { e.preventDefault(); btn.classList.add('pressed'); startRepeat(dir); };
+  const up   = (e) => { e.preventDefault(); btn.classList.remove('pressed'); stopRepeat(); };
+  btn.addEventListener('mousedown', down);
+  btn.addEventListener('mouseup', up);
+  btn.addEventListener('mouseleave', up);
+  btn.addEventListener('touchstart', down);
+  btn.addEventListener('touchend', up);
+  btn.addEventListener('touchcancel', up);
+}
+
+bindPad('btnUp',    'forward');
+bindPad('btnDown',  'backward');
+bindPad('btnLeft',  'left');
+bindPad('btnRight', 'right');
+
+// STOP button
+['click','touchend'].forEach(ev =>
+  document.getElementById('btnStop').addEventListener(ev, (e) => {
+    e.preventDefault();
+    stopRepeat();
+  })
+);
+
+// ── Bind ABCD ──
+['A','B','C','D'].forEach(k => {
+  const btn = document.getElementById('btn'+k);
+  const down = (e) => { e.preventDefault(); btn.style.opacity = '0.7'; };
+  const up   = (e) => {
+    e.preventDefault(); btn.style.opacity = '1';
+    sendCmd(k);
+  };
+  btn.addEventListener('mousedown', down);
+  btn.addEventListener('mouseup', up);
+  btn.addEventListener('mouseleave', up);
+  btn.addEventListener('touchstart', down);
+  btn.addEventListener('touchend', up);
+  btn.addEventListener('touchcancel', up);
+});
+
+// ── Keyboard ──
+const keyDir = {
+  ArrowUp:'forward', ArrowDown:'backward', ArrowLeft:'left', ArrowRight:'right',
+  w:'forward', s:'backward', a:'left', d:'right',
+  W:'forward', S:'backward', A:'left', D:'right'
+};
+const keyCustom = { '1':'A', '2':'B', '3':'C', '4':'D' };
+const btnMap = { forward:'btnUp', backward:'btnDown', left:'btnLeft', right:'btnRight' };
+
+let keyActive = null;
+let keyTimer = null;
+
+document.addEventListener('keydown', (e) => {
+  const dir = keyDir[e.key];
+  if (dir) {
+    e.preventDefault();
+    if (keyCustom[e.key] !== undefined) return; // don't double-handle
+    const btn = document.getElementById(btnMap[dir]);
+    if (btn) btn.classList.add('pressed');
+    if (keyActive === dir) return;
+    keyActive = dir;
+    if (keyTimer) clearInterval(keyTimer);
+    sendCmd('turn ' + dir);
+    keyTimer = setInterval(() => sendCmd('turn ' + dir), REPEAT_MS);
+    return;
+  }
+  const c = keyCustom[e.key];
+  if (c) {
+    e.preventDefault();
+    sendCmd(c);
+    const btn = document.getElementById('btn'+c);
+    if (btn) { btn.style.opacity = '0.7'; setTimeout(() => btn.style.opacity = '1', 100); }
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  const dir = keyDir[e.key];
+  if (dir) {
+    e.preventDefault();
+    const btn = document.getElementById(btnMap[dir]);
+    if (btn) btn.classList.remove('pressed');
+    if (keyActive === dir) {
+      clearInterval(keyTimer); keyTimer = null; keyActive = null;
+      sendCmd('turn stop');
+    }
+  }
+});
+
+// ── Start ──
+connect();
+setInterval(pollHealth, 5000);
+pollHealth();
+</script>
+</body>
+</html>
