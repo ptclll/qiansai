@@ -62,6 +62,7 @@ static esp_netif_t *sta_netif = NULL;
 static const int CONNECTED_BIT = BIT0;
 
 static SemaphoreHandle_t ws_cfg_mutex;
+static SemaphoreHandle_t ws_write_mutex;  /* serialise ws_send across tasks */
 static char ws_server_ip[16];
 static uint16_t ws_server_port;
 
@@ -154,11 +155,18 @@ static void ws_stop(void)
 static int ws_send(const char *data, size_t len)
 {
     if (!ws_transport || !ws_connected) return -1;
+
+    /* Serialise writes — uart1_rx_task and ak09911c_task may
+     * call ws_send concurrently, which would corrupt the WS stream
+     * and trigger CLOSE frame 1002 from the server. */
+    xSemaphoreTake(ws_write_mutex, portMAX_DELAY);
+
     int ret = esp_transport_write(ws_transport, data, (int)len, pdMS_TO_TICKS(500));
     if (ret <= 0) {
-        /* Write failed — mark connection dead, rx task will reconnect */
         ws_connected = false;
     }
+
+    xSemaphoreGive(ws_write_mutex);
     return ret;
 }
 
@@ -531,7 +539,13 @@ void app_main(void)
 
     ws_cfg_mutex = xSemaphoreCreateMutex();
     if (!ws_cfg_mutex) {
-        ESP_LOGE(TAG, "Failed to create mutex");
+        ESP_LOGE(TAG, "Failed to create cfg mutex");
+        return;
+    }
+
+    ws_write_mutex = xSemaphoreCreateMutex();
+    if (!ws_write_mutex) {
+        ESP_LOGE(TAG, "Failed to create write mutex");
         return;
     }
 
