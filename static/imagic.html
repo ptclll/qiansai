@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-version="20260703-v2">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>图片显示 v2</title>
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --card: #fff;
+            --text: #1a1a2e;
+            --muted: #6b7280;
+            --blue: #2563eb;
+            --green: #16a34a;
+            --red: #dc2626;
+            --border: #e5e7eb;
+            --shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI','Microsoft YaHei',system-ui,sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ═══════════ Nav bar ═══════════ */
+        #nav-bar {
+            position: fixed; top: 0; right: 0; z-index: 9999;
+            display: flex; gap: 0; padding: 8px 14px;
+        }
+        #nav-bar a {
+            display: block; padding: 7px 16px;
+            background: rgba(30,41,59,0.88); color: #cbd5e1;
+            text-decoration: none; font-size: 13px;
+            font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+            backdrop-filter: blur(6px); transition: all 0.2s;
+            border-right: 1px solid rgba(255,255,255,0.1); white-space: nowrap;
+        }
+        #nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+        #nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+        #nav-bar a:hover { background: rgba(37,99,235,0.75); color: #fff; }
+        #nav-bar a.active { background: rgba(37,99,235,0.85); color: #fff; font-weight: bold; }
+
+        /* ═══════════ Topbar ═══════════ */
+        .topbar {
+            display: flex; align-items: center;
+            height: 48px; padding: 0 20px;
+            background: #1e293b; color: #f1f5f9; font-size: 14px;
+            box-shadow: 0 1px 8px rgba(0,0,0,0.12);
+        }
+        .topbar .brand { font-weight: 600; letter-spacing: 0.5px; }
+        .topbar .brand span { color: #38bdf8; }
+
+        /* ═══════════ Content ═══════════ */
+        main {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; padding: 20px; gap: 16px; max-width: 960px; margin: 0 auto; width: 100%;
+        }
+        .image-box {
+            width: 100%; background: var(--card);
+            border: 1px solid var(--border); border-radius: 14px;
+            overflow: hidden; display: flex; align-items: center;
+            justify-content: center; min-height: 300px;
+            box-shadow: var(--shadow);
+        }
+        .image-box img {
+            display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain;
+        }
+        .image-placeholder {
+            color: var(--muted); font-size: 15px; text-align: center;
+            line-height: 1.8; padding: 60px;
+        }
+        .upload-card {
+            width: 100%; border: 2px dashed var(--border);
+            border-radius: 14px; padding: 28px; text-align: center;
+            cursor: pointer; transition: all 0.2s;
+            background: var(--card); box-shadow: var(--shadow);
+        }
+        .upload-card:hover, .upload-card.dragover {
+            border-color: var(--blue); background: #eff6ff;
+        }
+        .upload-card input[type=file] { display: none; }
+        .upload-card label { cursor: pointer; color: var(--blue); font-weight: 600; font-size: 15px; }
+        .upload-card .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+        .info-bar {
+            padding: 10px 24px; text-align: center; font-size: 13px;
+            color: var(--muted); border-top: 1px solid var(--border); background: var(--card);
+        }
+        .info-bar .time { color: var(--blue); }
+        .info-bar .empty { color: var(--muted); }
+        .info-bar .err { color: var(--red); }
+    </style>
+</head>
+<body>
+
+    <nav id="nav-bar">
+        <a href="/">🗺️ 地图</a>
+        <a href="http://8.148.208.229:8010/">📟 串口</a>
+        <a href="/imagic" class="active">🖼️ 图片</a>
+        <a href="http://8.148.208.229:8010/control">🎮 控制</a>
+    </nav>
+
+    <div class="topbar">
+        <div class="brand">🖼️ <span>Image</span> Display</div>
+    </div>
+
+    <main>
+        <div class="image-box" id="imageContainer">
+            <div class="image-placeholder" id="placeholder">暂无图片，请上传或等待 ESP32 发送</div>
+            <img id="mainImage" src="" alt="Current Image" style="display:none">
+        </div>
+        <div class="upload-card" id="uploadArea">
+            <label for="fileInput">📤 点击上传图片</label>
+            <input type="file" id="fileInput" accept="image/*">
+            <div class="hint">支持 JPG / PNG / GIF / WebP / BMP</div>
+        </div>
+    </main>
+
+    <div class="info-bar" id="infoBar">
+        <span class="empty">等待图片...</span>
+    </div>
+
+    <script>
+    const img = document.getElementById('mainImage');
+    const placeholder = document.getElementById('placeholder');
+    const infoBar = document.getElementById('infoBar');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    let lastMtime = null;
+
+    function showImage(src, filename, size, mtime) {
+        placeholder.style.display = 'none';
+        const preload = new Image();
+        preload.onload = () => { img.src = src; img.style.display = 'block'; img.style.opacity = '1'; };
+        preload.onerror = () => { infoBar.innerHTML = '<span class="err">图片加载失败</span>'; placeholder.style.display = 'block'; img.style.display = 'none'; };
+        preload.src = src;
+        const sizeKB = (size/1024).toFixed(1);
+        infoBar.innerHTML = `${filename} | ${sizeKB} KB | <span class="time">${new Date(mtime*1000).toLocaleString()}</span>`;
+    }
+
+    function hideImage() {
+        img.style.display = 'none'; placeholder.style.display = 'block';
+        infoBar.innerHTML = '<span class="empty">等待图片...</span>'; lastMtime = null;
+    }
+
+    async function refreshImage() {
+        try {
+            const resp = await fetch('/api/current_image');
+            const data = await resp.json();
+            if (!data.image) { hideImage(); return; }
+            if (data.mtime === lastMtime) return;
+            lastMtime = data.mtime;
+            showImage('/images/'+data.image+'?v='+data.mtime, data.image, data.size, data.mtime);
+        } catch(e) { console.error('Refresh failed:', e); }
+    }
+
+    uploadArea.addEventListener('click', (e) => { if (e.target !== fileInput) fileInput.click(); });
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault(); uploadArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0]; if (file) uploadFile(file);
+    });
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0]; if (file) { uploadFile(file); fileInput.value = ''; }
+    });
+
+    async function uploadFile(file) {
+        infoBar.innerHTML = '上传中...';
+        const form = new FormData(); form.append('file', file);
+        try {
+            const resp = await fetch('/api/upload_image', {method:'POST',body:form});
+            const data = await resp.json();
+            if (data.ok) { lastMtime = null; refreshImage(); }
+        } catch(e) { infoBar.innerHTML = '<span class="err">上传失败</span>'; }
+    }
+
+    refreshImage();
+    setInterval(refreshImage, 3000);
+    </script>
+</body>
+</html>

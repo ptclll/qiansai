@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>ESP32 方向控制</title>
+<style>
+:root {
+  --bg: #0b1121;
+  --card: #111827;
+  --border: #1e293b;
+  --txt: #e2e8f0;
+  --sub: #94a3b8;
+  --blue: #38bdf8;
+  --green: #4ade80;
+  --red: #f87171;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* ── Nav bar ── */
+#nav-bar {
+  position: fixed; top: 0; right: 0; z-index: 9999;
+  display: flex; gap: 0; padding: 8px 14px;
+}
+#nav-bar a {
+  display: block; padding: 7px 16px;
+  background: rgba(0,0,0,0.72); color: #ccc;
+  text-decoration: none; font-size: 13px;
+  font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+  backdrop-filter: blur(6px); transition: all 0.2s;
+  border-right: 1px solid rgba(255,255,255,0.1);
+  white-space: nowrap;
+}
+#nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+#nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+#nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+#nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+
+body {
+  background: radial-gradient(ellipse at 50% 0%, #1a2332 0%, var(--bg) 70%);
+  color: var(--txt);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+header {
+  width: 100%;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17,24,39,0.6);
+  backdrop-filter: blur(12px);
+}
+header h1 { font-size: 20px; font-weight: 700; }
+header h1 span { color: var(--blue); }
+header a {
+  color: var(--sub);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+header a:hover { color: var(--txt); border-color: var(--sub); }
+
+/* 状态栏 */
+.status-bar {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--sub);
+}
+.status-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #ef4444; box-shadow: 0 0 8px #ef4444;
+  transition: all 0.3s;
+}
+.status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+
+/* D-Pad 容器 */
+.dpad-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 12px;
+  width: min(320px, 80vw);
+  height: min(320px, 80vw);
+}
+
+.dpad-btn {
+  border: 2px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  color: var(--txt);
+  font-size: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.dpad-btn:active,
+.dpad-btn.pressed {
+  background: #1e3a5f;
+  border-color: var(--blue);
+  box-shadow: 0 0 24px rgba(56,189,248,0.4);
+  transform: scale(0.95);
+}
+
+.dpad-btn svg {
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+}
+
+.dpad-arrow {
+  font-size: 36px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* 中间 STOP 按钮 */
+.btn-stop {
+  background: rgba(248,113,113,0.1);
+  border-color: rgba(248,113,113,0.3);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.btn-stop:active,
+.btn-stop.pressed {
+  background: rgba(248,113,113,0.25);
+  border-color: var(--red);
+  box-shadow: 0 0 24px rgba(248,113,113,0.4);
+}
+
+/* 指令日志 */
+.log-panel {
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 24px;
+  padding: 0 20px;
+}
+.log-title {
+  font-size: 12px;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.log-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 13px;
+  color: var(--sub);
+  line-height: 1.6;
+}
+.log-box .entry { display: flex; gap: 8px; }
+.log-box .time { color: #64748b; flex-shrink: 0; }
+.log-box .cmd-up { color: var(--blue); }
+.log-box .cmd-down { color: var(--green); }
+.log-box .cmd-left { color: #fbbf24; }
+.log-box .cmd-right { color: #fb923c; }
+.log-box .cmd-stop { color: var(--red); }
+.log-box .cmd-error { color: #ef4444; }
+</style>
+</head>
+<body>
+
+<nav id="nav-bar">
+  <a href="http://8.148.208.229/">🗺️ 地图</a>
+  <a href="http://8.148.208.229:8010/">📟 串口</a>
+  <a href="http://8.148.208.229/imagic">🖼️ 图片</a>
+  <a href="http://8.148.208.229:8010/control" class="active">🎮 控制</a>
+</nav>
+
+<header>
+  <h1>🎮 <span>ESP32</span> 方向控制</h1>
+  <a href="/">← 返回首页</a>
+</header>
+
+<div class="status-bar">
+  <div class="status-dot" id="statusDot"></div>
+  <span id="statusText">就绪</span>
+</div>
+
+<div class="dpad-container">
+  <div class="dpad">
+    <!-- 上 -->
+    <button class="dpad-btn" id="btnUp" style="grid-column:2;grid-row:1">
+      <span class="dpad-arrow">▲</span>
+    </button>
+    <!-- 左 -->
+    <button class="dpad-btn" id="btnLeft" style="grid-column:1;grid-row:2">
+      <span class="dpad-arrow">◀</span>
+    </button>
+    <!-- STOP -->
+    <button class="dpad-btn btn-stop" id="btnStop" style="grid-column:2;grid-row:2">STOP</button>
+    <!-- 右 -->
+    <button class="dpad-btn" id="btnRight" style="grid-column:3;grid-row:2">
+      <span class="dpad-arrow">▶</span>
+    </button>
+    <!-- 下 -->
+    <button class="dpad-btn" id="btnDown" style="grid-column:2;grid-row:3">
+      <span class="dpad-arrow">▼</span>
+    </button>
+  </div>
+</div>
+
+<div class="log-panel">
+  <div class="log-title">📋 指令日志</div>
+  <div class="log-box" id="logBox">
+    <span style="color:#64748b">按下方向键发送指令...</span>
+  </div>
+</div>
+
+<script>
+const REPEAT_INTERVAL = 100; // 长按每 100ms 发送一次
+
+let activeCmd = null;
+let repeatTimer = null;
+let logLines = [];
+
+// ── 发送指令 ──
+async function sendCmd(cmd) {
+  const now = new Date();
+  const time = now.toLocaleTimeString('zh-CN', {hour12: false}) + '.' +
+    String(now.getMilliseconds()).padStart(3, '0');
+
+  try {
+    const resp = await fetch('/api/control', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({cmd: cmd})
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      addLog(time, cmd, 'ok');
+      updateStatus(true);
+    } else {
+      addLog(time, cmd, 'error', data.msg);
+      updateStatus(false);
+    }
+  } catch(e) {
+    addLog(time, cmd, 'error', '网络错误');
+    updateStatus(false);
+  }
+}
+
+// ── 日志 ──
+function addLog(time, cmd, type, msg) {
+  logLines.unshift({time, cmd, type, msg});
+  if (logLines.length > 50) logLines.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const box = document.getElementById('logBox');
+  if (logLines.length === 0) {
+    box.innerHTML = '<span style="color:#64748b">等待操作...</span>';
+    return;
+  }
+  box.innerHTML = logLines.slice(0, 20).map(l => {
+    let cls = 'cmd-' + l.cmd;
+    if (l.type === 'error') cls = 'cmd-error';
+    const extra = l.msg ? ` <span style="color:#ef4444">(${l.msg})</span>` : '';
+    return `<div class="entry"><span class="time">${l.time}</span><span class="${cls}">${l.cmd}</span>${extra}</div>`;
+  }).join('');
+}
+
+// ── 在线状态 ──
+function updateStatus(online) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  if (online) {
+    dot.className = 'status-dot online';
+    txt.textContent = 'ESP32 在线';
+  } else {
+    dot.className = 'status-dot';
+    txt.textContent = '就绪（等待 ESP32）';
+  }
+}
+
+// ── 开始重复发送 ──
+function startRepeat(cmd) {
+  if (activeCmd === cmd && repeatTimer) return; // 已经在发送同一个指令
+  stopRepeat();
+
+  activeCmd = cmd;
+  sendCmd(cmd); // 立即发送一次
+
+  repeatTimer = setInterval(() => {
+    sendCmd(cmd);
+  }, REPEAT_INTERVAL);
+}
+
+// ── 停止重复发送 ──
+function stopRepeat() {
+  if (repeatTimer) {
+    clearInterval(repeatTimer);
+    repeatTimer = null;
+  }
+  if (activeCmd) {
+    sendCmd('stop');
+    activeCmd = null;
+  }
+}
+
+// ── 按钮绑定 ──
+function bindButton(id, cmd) {
+  const btn = document.getElementById(id);
+
+  // 鼠标事件
+  btn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    btn.classList.add('pressed');
+    startRepeat(cmd);
+  });
+
+  btn.addEventListener('mouseup', (e) => {
+    e.preventDefault();
+    btn.classList.remove('pressed');
+    stopRepeat();
+  });
+
+  btn.addEventListener('mouseleave', (e) => {
+    btn.classList.remove('pressed');
+    stopRepeat();
+  });
+
+  // 触摸事件（移动端）
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    btn.classList.add('pressed');
+    startRepeat(cmd);
+  });
+
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    btn.classList.remove('pressed');
+    stopRepeat();
+  });
+
+  btn.addEventListener('touchcancel', (e) => {
+    btn.classList.remove('pressed');
+    stopRepeat();
+  });
+}
+
+// ── STOP 按钮（单击） ──
+document.getElementById('btnStop').addEventListener('click', () => {
+  stopRepeat();
+  sendCmd('stop');
+});
+
+// 绑定方向按钮
+bindButton('btnUp', 'up');
+bindButton('btnDown', 'down');
+bindButton('btnLeft', 'left');
+bindButton('btnRight', 'right');
+
+// ── 键盘支持 ──
+const keyMap = {
+  'ArrowUp': 'up',
+  'ArrowDown': 'down',
+  'ArrowLeft': 'left',
+  'ArrowRight': 'right',
+  'w': 'up',
+  's': 'down',
+  'a': 'left',
+  'd': 'right',
+};
+
+let keyRepeatTimer = null;
+let keyActiveCmd = null;
+
+document.addEventListener('keydown', (e) => {
+  const cmd = keyMap[e.key];
+  if (!cmd) return;
+  e.preventDefault();
+
+  // 高亮对应按钮
+  const btnMap = {up:'btnUp', down:'btnDown', left:'btnLeft', right:'btnRight'};
+  const btn = document.getElementById(btnMap[cmd]);
+  if (btn && !btn.classList.contains('pressed')) {
+    btn.classList.add('pressed');
+  }
+
+  if (keyActiveCmd === cmd) return; // 已在重复
+
+  if (keyRepeatTimer) clearInterval(keyRepeatTimer);
+  keyActiveCmd = cmd;
+  sendCmd(cmd);
+  keyRepeatTimer = setInterval(() => sendCmd(cmd), REPEAT_INTERVAL);
+});
+
+document.addEventListener('keyup', (e) => {
+  const cmd = keyMap[e.key];
+  if (!cmd) return;
+  e.preventDefault();
+
+  const btnMap = {up:'btnUp', down:'btnDown', left:'btnLeft', right:'btnRight'};
+  const btn = document.getElementById(btnMap[cmd]);
+  if (btn) btn.classList.remove('pressed');
+
+  if (keyActiveCmd === cmd) {
+    clearInterval(keyRepeatTimer);
+    keyRepeatTimer = null;
+    keyActiveCmd = null;
+    sendCmd('stop');
+  }
+});
+</script>
+
+</body>
+</html>

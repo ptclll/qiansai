@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP32 环境监测</title>
+<style>
+:root {
+  --bg: #0b1121;
+  --card: #111827;
+  --border: #1e293b;
+  --txt: #e2e8f0;
+  --sub: #94a3b8;
+  --blue: #38bdf8;
+  --green: #4ade80;
+  --orange: #fb923c;
+  --purple: #c084fc;
+  --red: #f87171;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Nav bar ── */
+#nav-bar {
+  position: fixed; top: 0; right: 0; z-index: 9999;
+  display: flex; gap: 0; padding: 8px 14px;
+}
+#nav-bar a {
+  display: block; padding: 7px 16px;
+  background: rgba(0,0,0,0.72); color: #ccc;
+  text-decoration: none; font-size: 13px;
+  font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+  backdrop-filter: blur(6px); transition: all 0.2s;
+  border-right: 1px solid rgba(255,255,255,0.1);
+  white-space: nowrap;
+}
+#nav-bar a:first-child { border-radius: 8px 0 0 8px; }
+#nav-bar a:last-child  { border-radius: 0 8px 8px 0; border-right: none; }
+#nav-bar a:hover { background: rgba(33,150,243,0.7); color: #fff; }
+#nav-bar a.active { background: rgba(33,150,243,0.85); color: #fff; font-weight: bold; }
+
+body {
+  background: radial-gradient(ellipse at 50% 0%, #1a2332 0%, var(--bg) 70%);
+  color: var(--txt);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17,24,39,0.6);
+  backdrop-filter: blur(12px);
+}
+header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+header h1 span { color: var(--blue); }
+.header-right { display:flex; gap:12px; align-items:center; }
+.status-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+.status-dot.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.status-text { font-size: 13px; color: var(--sub); }
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+  padding: 24px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── 图片面板 ── */
+.image-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 420px;
+}
+.image-panel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.6s ease;
+}
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--sub);
+  font-size: 15px;
+}
+.image-placeholder svg { opacity: 0.3; }
+.image-counter {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  background: rgba(0,0,0,0.6);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--sub);
+}
+
+/* ── 数据面板 ── */
+.data-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.data-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.data-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+}
+.data-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.icon-hum  { background: rgba(56,189,248,0.15);  color: var(--blue); }
+.icon-temp { background: rgba(248,113,113,0.15); color: var(--red); }
+.icon-co2  { background: rgba(192,132,252,0.15); color: var(--purple); }
+.icon-pres { background: rgba(74,222,128,0.15); color: var(--green); }
+
+.data-info { flex:1; }
+.data-label { font-size: 12px; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.data-value { font-size: 36px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.data-unit  { font-size: 16px; font-weight: 400; color: var(--sub); margin-left: 4px; }
+.data-status { font-size: 12px; margin-top: 4px; }
+.data-status .ok { color: var(--green); }
+.data-status .stale { color: var(--orange); }
+
+/* ── 更新时间 ── */
+.update-bar {
+  padding: 12px 32px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--sub);
+  border-top: 1px solid var(--border);
+}
+.update-bar .time { color: var(--blue); }
+
+/* ── 响应式 ── */
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .image-panel { min-height: 280px; }
+  .data-value { font-size: 28px; }
+  header { padding: 16px; }
+  header h1 { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<nav id="nav-bar">
+  <a href="http://8.148.208.229/">🗺️ 地图</a>
+  <a href="http://8.148.208.229:8010/">📟 串口</a>
+  <a href="http://8.148.208.229/imagic" class="active">🖼️ 图片</a>
+  <a href="http://8.148.208.229:8010/control">🎮 控制</a>
+</nav>
+
+<header>
+  <h1>🌿 <span>ESP32</span> 环境监测</h1>
+  <div class="header-right">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">等待数据...</span>
+  </div>
+</header>
+
+<main>
+  <!-- 图片区域 -->
+  <section class="image-panel" id="imagePanel">
+    <div class="image-placeholder" id="imagePlaceholder">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      <span>暂无图片，请上传</span>
+    </div>
+    <img id="mainImage" src="" alt="监测图片" style="display:none">
+    <div class="image-counter" id="imageCounter"></div>
+  </section>
+
+  <!-- 数据区域 -->
+  <section class="data-panel">
+    <div class="data-card">
+      <div class="data-icon icon-hum">💧</div>
+      <div class="data-info">
+        <div class="data-label">湿度 Humidity</div>
+        <div class="data-value" id="valHum">--<span class="data-unit">%RH</span></div>
+        <div class="data-status" id="statusHum"></div>
+      </div>
+    </div>
+    <div class="data-card">
+      <div class="data-icon icon-temp">🌡️</div>
+      <div class="data-info">
+        <div class="data-label">温度 Temperature</div>
+        <div class="data-value" id="valTemp">--<span class="data-unit">°C</span></div>
+        <div class="data-status" id="statusTemp"></div>
+      </div>
+    </div>
+    <div class="data-card">
+      <div class="data-icon icon-co2">☁️</div>
+      <div class="data-info">
+        <div class="data-label">二氧化碳 CO₂</div>
+        <div class="data-value" id="valCO2">--<span class="data-unit">ppm</span></div>
+        <div class="data-status" id="statusCO2"></div>
+      </div>
+    </div>
+    <div class="data-card">
+      <div class="data-icon icon-pres">📊</div>
+      <div class="data-info">
+        <div class="data-label">气压 Pressure</div>
+        <div class="data-value" id="valPres">--<span class="data-unit">hPa</span></div>
+        <div class="data-status" id="statusPres"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="update-bar">
+  最后更新: <span class="time" id="lastUpdate">--</span>
+  &nbsp;|&nbsp;
+  <a href="/upload" style="color:var(--blue)">📤 上传图片</a>
+  &nbsp;|&nbsp;
+  <a href="http://8.148.208.229:8010/control" style="color:var(--green);font-weight:700">🎮 控制</a>
+</div>
+
+<script>
+const DATA_TIMEOUT = 10000; // 10秒无数据视为离线
+
+function formatVal(v, decimals) {
+  if (v === null || v === undefined) return '--';
+  if (typeof v === 'number') return v.toFixed(decimals || 1);
+  return v;
+}
+
+function updateStatus(el, ts) {
+  const now = Date.now() / 1000;
+  const elapsed = now - ts;
+  if (!ts || elapsed > DATA_TIMEOUT) {
+    el.innerHTML = '<span class="stale">⚠ 数据过期</span>';
+    return false;
+  }
+  el.innerHTML = '<span class="ok">● 实时</span>';
+  return true;
+}
+
+async function fetchData() {
+  try {
+    const resp = await fetch('/api/data');
+    const data = await resp.json();
+
+    // 更新数值
+    document.getElementById('valHum').innerHTML = formatVal(data.Humidity, 1) + '<span class="data-unit">%RH</span>';
+    document.getElementById('valTemp').innerHTML = formatVal(data.Temperature, 1) + '<span class="data-unit">°C</span>';
+    document.getElementById('valCO2').innerHTML = formatVal(data.co2, 0) + '<span class="data-unit">ppm</span>';
+    document.getElementById('valPres').innerHTML = formatVal(data.pressure, 1) + '<span class="data-unit">hPa</span>';
+
+    // 更新状态
+    const anyOnline = updateStatus(document.getElementById('statusHum'), data.timestamp);
+    updateStatus(document.getElementById('statusTemp'), data.timestamp);
+    updateStatus(document.getElementById('statusCO2'), data.timestamp);
+    updateStatus(document.getElementById('statusPres'), data.timestamp);
+
+    // 在线状态
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    if (anyOnline) {
+      dot.classList.add('online');
+      txt.textContent = '在线';
+    } else {
+      dot.classList.remove('online');
+      txt.textContent = '等待数据...';
+    }
+
+    // 更新时间
+    if (data.timestamp) {
+      const d = new Date(data.timestamp * 1000);
+      document.getElementById('lastUpdate').textContent =
+        d.toLocaleTimeString('zh-CN', {hour12: false});
+    }
+  } catch(e) {
+    console.error('数据获取失败:', e);
+  }
+}
+
+let currentImageIdx = -1;
+let imageList = [];
+
+async function fetchImage() {
+  try {
+    const resp = await fetch('/api/current_image');
+    const data = await resp.json();
+    const img = document.getElementById('mainImage');
+    const placeholder = document.getElementById('imagePlaceholder');
+    const counter = document.getElementById('imageCounter');
+
+    if (!data.image) {
+      img.style.display = 'none';
+      placeholder.style.display = 'flex';
+      counter.textContent = '';
+      return;
+    }
+
+    placeholder.style.display = 'none';
+    img.style.display = 'block';
+
+    // 切换图片时添加淡入效果
+    const newSrc = '/images/' + data.image;
+    if (img.src !== newSrc && img.src !== window.location.origin + newSrc) {
+      img.style.opacity = '0';
+      img.src = newSrc;
+      img.onload = () => { img.style.opacity = '1'; };
+
+      // 获取总数
+      const listResp = await fetch('/api/images');
+      const listData = await listResp.json();
+      counter.textContent = `${listData.count} 张图片`;
+    }
+  } catch(e) {
+    console.error('图片获取失败:', e);
+  }
+}
+
+// 轮询
+setInterval(fetchData, 2000);
+setInterval(fetchImage, 1000);
+
+// 初始加载
+fetchData();
+fetchImage();
+</script>
+
+</body>
+</html>
