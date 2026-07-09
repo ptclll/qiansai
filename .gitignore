@@ -1,0 +1,9 @@
+# Build outputs
+obj/
+
+# IDE project files
+*.launch
+*.wvproj
+
+# Editor
+.vscode/
